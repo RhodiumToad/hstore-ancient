@@ -1,0 +1,61 @@
+============================================================================
+WARNING WARNING WARNING
+============================================================================
+
+THIS VERSION OF hstore IS NOT BINARY COMPATIBLE WITH THE ONE SHIPPED
+IN contrib/hstore IN POSTGRESQL 8.3. IF YOU ALREADY HAVE DATA IN YOUR
+DATABASE THAT USES THE hstore TYPE, THEN YOU MUST FOLLOW THE
+PROCEDURES GIVEN BELOW TO INSTALL THIS VERSION OTHERWISE YOU WILL
+SUFFER CRASHES AND POTENTIALLY LOST DATA.
+
+ALWAYS MAKE BACKUPS BEFORE ATTEMPTING TO INSTALL THIS.
+
+============================================================================
+
+hstore-new
+==========
+
+This module is an enhanced version of the hstore type from
+contrib/hstore, intended to allow the new features to be used in
+existing postgresql versions. (This code is being submitted for
+inclusion in future versions, but I have had requests to backport the
+functionality.)
+
+This code supports all the functions provided by contrib/hstore and
+adds the following additions:
+
+  - removal of undocumented 65535-byte limit on keys/values; both
+    keys and values can now be as long as desired, within the 1GB
+    limit for the whole hstore value (though you'll find a lot of
+    stuff breaks if you have hstores over 500MB, so don't try).
+
+  - support for btree and hash opclasses (allows hstores to be
+    compared for equality, aggregated, and have UNIQUE indexes)
+
+  - binary I/O now supported
+
+  - many new functions and operators:
+
+    hstore -> text[]  returns text[]   (slice to value array)
+    hstore => text[]  returns hstore   (slice to new hstore)
+    hstore ?| text[]  returns boolean  (check for any of a list of keys)
+    hstore ?& text[]  returns boolean  (check for all of a list of keys)
+    hstore - text     returns hstore   (delete one element)
+    hstore - text[]   returns hstore   (delete many elements)
+    hstore - hstore   returns hstore   (delete matching pairs)
+    text[] => text[]  returns hstore   (construct from key/value arrays)
+    hstore = hstore   returns hstore   (equality)
+    hstore <> hstore  returns hstore   (inequality)
+    record #= hstore  returns record   (see populate_record)
+
+  - conversions between hstore and record values:
+
+    hstore(record)    - construct an hstore from a record
+    populate_record(record,hstore)
+        - fill in fields of a record as specified by an hstore
+
+
+INSTALLATION
+============
+
+(todo)
