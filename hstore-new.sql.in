@@ -1,4 +1,4 @@
-/* $Id: hstore-new.sql.in,v 1.1 2009/03/24 16:13:09 andrewsn Exp $ */
+/* $Id: hstore-new.sql.in,v 1.1.1.1 2009/03/24 16:13:09 andrewsn Exp $ */
 
 -- slightly modified from the contrib/ version for safety
 
