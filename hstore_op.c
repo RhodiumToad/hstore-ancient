@@ -7,6 +7,8 @@
 #include "funcapi.h"
 #include "utils/builtins.h"
 #include "access/hash.h"
+#include "access/htup.h"
+#include "access/heapam.h"
 
 #include "hstore.h"
 
