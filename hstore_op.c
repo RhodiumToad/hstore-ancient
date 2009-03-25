@@ -25,6 +25,25 @@ HSTORE_POLLUTE(hstore_svals,svals)
 HSTORE_POLLUTE(hstore_each,each)
 #endif
 
+#if PG_VERSION_NUM < 80400
+/*
+ * cstring_to_text_with_len
+ *
+ * Same as cstring_to_text except the caller specifies the string length;
+ * the string need not be null_terminated.
+ */
+static text *
+cstring_to_text_with_len(const char *s, int len)
+{
+	text	   *result = (text *) palloc(len + VARHDRSZ);
+
+	SET_VARSIZE(result, len + VARHDRSZ);
+	memcpy(VARDATA(result), s, len);
+
+	return result;
+}
+#endif
+
 /* we're often finding a sequence of keys in ascending order. The
  * "lowbound" parameter is used to cache lower bounds of searches
  * between calls, based on this assumption. Pass NULL for it for

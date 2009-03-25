@@ -6,6 +6,8 @@
 #include "utils/lsyscache.h"
 #include "utils/typcache.h"
 #include "libpq/pqformat.h"
+#include "access/htup.h"
+#include "access/heapam.h"
 #include "funcapi.h"
 
 #include <ctype.h>
