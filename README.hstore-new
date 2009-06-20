@@ -44,8 +44,8 @@ adds the following additions:
     hstore - text[]   returns hstore   (delete many elements)
     hstore - hstore   returns hstore   (delete matching pairs)
     text[] => text[]  returns hstore   (construct from key/value arrays)
-    hstore = hstore   returns hstore   (equality)
-    hstore <> hstore  returns hstore   (inequality)
+    hstore = hstore   returns boolean  (equality)
+    hstore <> hstore  returns boolean  (inequality)
     record #= hstore  returns record   (see populate_record)
 
   - conversions between hstore and record values:
