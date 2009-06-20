@@ -1,4 +1,4 @@
-/* $Id: hstore-new.sql.in,v 1.2 2009/06/20 20:37:26 andrewsn Exp $ */
+/* $Id: hstore-new.sql.in,v 1.3 2009/06/20 23:17:16 andrewsn Exp $ */
 
 -- slightly modified from the contrib/ version for safety
 
@@ -222,12 +222,12 @@ CREATE OPERATOR ~ (
 CREATE FUNCTION tconvert(text,text)
 RETURNS hstore
 AS 'MODULE_PATHNAME','hstore_from_text'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE; -- not STRICT; needs to allow (key,NULL)
 
 CREATE FUNCTION hstore(text,text)
 RETURNS hstore
 AS 'MODULE_PATHNAME','hstore_from_text'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE; -- not STRICT; needs to allow (key,NULL)
 
 CREATE OPERATOR => (
 	LEFTARG = text,
@@ -238,7 +238,7 @@ CREATE OPERATOR => (
 CREATE FUNCTION hstore(text[],text[])
 RETURNS hstore
 AS 'MODULE_PATHNAME', 'hstore_from_arrays'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE; -- not STRICT; allows (keys,null)
 
 CREATE OPERATOR => (
 	LEFTARG = text[],
@@ -249,7 +249,7 @@ CREATE OPERATOR => (
 CREATE FUNCTION hstore(record)
 RETURNS hstore
 AS 'MODULE_PATHNAME', 'hstore_from_record'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE; -- not STRICT; allows (null::recordtype)
 
 CREATE FUNCTION akeys(hstore)
 RETURNS _text
@@ -281,7 +281,7 @@ LANGUAGE C STRICT IMMUTABLE;
 CREATE FUNCTION populate_record(anyelement,hstore)
 RETURNS anyelement
 AS 'MODULE_PATHNAME', 'hstore_populate_record'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE; -- not STRICT; allows (null::rectype,hstore)
 
 CREATE OPERATOR #= (
 	LEFTARG = anyelement,
@@ -432,12 +432,12 @@ CREATE TYPE ghstore (
 CREATE FUNCTION ghstore_compress(internal)
 RETURNS internal
 AS 'MODULE_PATHNAME'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE STRICT;
 
 CREATE FUNCTION ghstore_decompress(internal)
 RETURNS internal
 AS 'MODULE_PATHNAME'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE STRICT;
 
 CREATE FUNCTION ghstore_penalty(internal,internal,internal)
 RETURNS internal
@@ -447,22 +447,22 @@ LANGUAGE C IMMUTABLE STRICT;
 CREATE FUNCTION ghstore_picksplit(internal, internal)
 RETURNS internal
 AS 'MODULE_PATHNAME'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE STRICT;
 
 CREATE FUNCTION ghstore_union(internal, internal)
 RETURNS internal
 AS 'MODULE_PATHNAME'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE STRICT;
 
 CREATE FUNCTION ghstore_same(internal, internal, internal)
 RETURNS internal
 AS 'MODULE_PATHNAME'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE STRICT;
 
 CREATE FUNCTION ghstore_consistent(internal,internal,int,oid,internal)
 RETURNS bool
 AS 'MODULE_PATHNAME'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE STRICT;
 
 -- register the opclass for indexing (not as default)
 CREATE OPERATOR CLASS gist_hstore_ops
@@ -489,17 +489,17 @@ AS
 CREATE FUNCTION gin_extract_hstore(internal, internal)
 RETURNS internal
 AS 'MODULE_PATHNAME'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE STRICT;
 
 CREATE FUNCTION gin_extract_hstore_query(internal, internal, int2)
 RETURNS internal
 AS 'MODULE_PATHNAME'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE STRICT;
 
 CREATE FUNCTION gin_consistent_hstore(internal, int2, internal, internal)
 RETURNS bool
 AS 'MODULE_PATHNAME'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE STRICT;
 
 CREATE OPERATOR CLASS gin_hstore_ops
 DEFAULT FOR TYPE hstore USING gin

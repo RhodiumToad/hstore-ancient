@@ -5,9 +5,9 @@
 #include "catalog/pg_type.h"
 #include "utils/lsyscache.h"
 #include "utils/typcache.h"
-#include "libpq/pqformat.h"
 #include "access/htup.h"
 #include "access/heapam.h"
+#include "libpq/pqformat.h"
 #include "funcapi.h"
 
 #include <ctype.h>
@@ -552,33 +552,58 @@ hstore_from_arrays(PG_FUNCTION_ARGS)
 	Datum	   *value_datums;
 	bool	   *value_nulls;
 	int		   value_count;
-	ArrayType  *key_array = PG_GETARG_ARRAYTYPE_P(0);
-	ArrayType  *value_array = PG_GETARG_ARRAYTYPE_P(1);
+	ArrayType  *key_array;
+	ArrayType  *value_array;
 	int		   i;
 
-	Assert(ARR_ELEMTYPE(key_array) == TEXTOID);
-	Assert(ARR_ELEMTYPE(value_array) == TEXTOID);
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
 
-	if (ARR_NDIM(key_array) != 1 || ARR_NDIM(value_array) != 1)
+	key_array = PG_GETARG_ARRAYTYPE_P(0);
+
+	Assert(ARR_ELEMTYPE(key_array) == TEXTOID);
+
+	if (ARR_NDIM(key_array) != 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
 				 errmsg("wrong number of array subscripts")));
-
-	if (ARR_DIMS(key_array)[0] != ARR_DIMS(value_array)[0]
-		|| ARR_LBOUND(key_array)[0] != ARR_LBOUND(value_array)[0])
-		ereport(ERROR,
-				(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
-				 errmsg("cannot construct hstore from arrays of differing bounds")));
 
 	deconstruct_array(key_array,
 					  TEXTOID, -1, false, 'i',
 					  &key_datums, &key_nulls, &key_count);
 
-	deconstruct_array(value_array,
-					  TEXTOID, -1, false, 'i',
-					  &value_datums, &value_nulls, &value_count);
+	/* value_array might be NULL */
 
-	Assert(key_count == value_count);
+	if (PG_ARGISNULL(1))
+	{
+		value_array = NULL;
+		value_count = key_count;
+		value_datums = NULL;
+		value_nulls = NULL;
+	}
+	else
+	{
+		value_array = PG_GETARG_ARRAYTYPE_P(1);
+
+		Assert(ARR_ELEMTYPE(value_array) == TEXTOID);
+
+		if (ARR_NDIM(value_array) != 1)
+			ereport(ERROR,
+					(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
+					 errmsg("wrong number of array subscripts")));
+
+		if (ARR_DIMS(key_array)[0] != ARR_DIMS(value_array)[0]
+			|| ARR_LBOUND(key_array)[0] != ARR_LBOUND(value_array)[0])
+			ereport(ERROR,
+					(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
+					 errmsg("cannot construct hstore from arrays of differing bounds")));
+
+		deconstruct_array(value_array,
+						  TEXTOID, -1, false, 'i',
+						  &value_datums, &value_nulls, &value_count);
+
+		Assert(key_count == value_count);
+	}
 
 	pairs = palloc(key_count * sizeof(Pairs));
 
@@ -589,7 +614,7 @@ hstore_from_arrays(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 					 errmsg("null value not allowed for hstore key")));
 
-		if (value_nulls[i])
+		if (!value_nulls || value_nulls[i])
 		{
 			pairs[i].key = VARDATA_ANY(key_datums[i]);
 			pairs[i].val = NULL;
@@ -642,7 +667,7 @@ Datum		hstore_from_record(PG_FUNCTION_ARGS);
 Datum
 hstore_from_record(PG_FUNCTION_ARGS)
 {
-	HeapTupleHeader rec = PG_GETARG_HEAPTUPLEHEADER(0);
+	HeapTupleHeader rec;
 	int4		buflen;
 	HStore	   *out;
 	Pairs      *pairs;
@@ -656,17 +681,30 @@ hstore_from_record(PG_FUNCTION_ARGS)
 	Datum	   *values;
 	bool	   *nulls;
 
-	/* Extract type info from the tuple itself */
-	tupType = HeapTupleHeaderGetTypeId(rec);
-	tupTypmod = HeapTupleHeaderGetTypMod(rec);
+	if (PG_ARGISNULL(0))
+	{
+		Oid     argtype = get_fn_expr_argtype(fcinfo->flinfo,0);
+
+		/* have no tuple to look at, so the only source of type info
+		 * is the argtype. The lookup_rowtype_tupdesc call below will
+		 * error out if we don't have a known composite type oid here.
+		 */
+		tupType = argtype;
+		tupTypmod = -1;
+
+		rec = NULL;
+	}
+	else
+	{
+		rec = PG_GETARG_HEAPTUPLEHEADER(0);
+
+		/* Extract type info from the tuple itself */
+		tupType = HeapTupleHeaderGetTypeId(rec);
+		tupTypmod = HeapTupleHeaderGetTypMod(rec);
+	}
+
 	tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
 	ncolumns = tupdesc->natts;
-
-	/* Build a temporary HeapTuple control structure */
-	tuple.t_len = HeapTupleHeaderGetDatumLength(rec);
-	ItemPointerSetInvalid(&(tuple.t_self));
-	tuple.t_tableOid = InvalidOid;
-	tuple.t_data = rec;
 
 	/*
 	 * We arrange to look up the needed I/O info just once per series of
@@ -696,12 +734,27 @@ hstore_from_record(PG_FUNCTION_ARGS)
 		my_extra->ncolumns = ncolumns;
 	}
 
-	values = (Datum *) palloc(ncolumns * sizeof(Datum));
-	nulls = (bool *) palloc(ncolumns * sizeof(bool));
 	pairs = palloc(ncolumns * sizeof(Pairs));
 
-	/* Break down the tuple into fields */
-	heap_deform_tuple(&tuple, tupdesc, values, nulls);
+	if (rec)
+	{
+		/* Build a temporary HeapTuple control structure */
+		tuple.t_len = HeapTupleHeaderGetDatumLength(rec);
+		ItemPointerSetInvalid(&(tuple.t_self));
+		tuple.t_tableOid = InvalidOid;
+		tuple.t_data = rec;
+
+		values = (Datum *) palloc(ncolumns * sizeof(Datum));
+		nulls = (bool *) palloc(ncolumns * sizeof(bool));
+
+		/* Break down the tuple into fields */
+		heap_deform_tuple(&tuple, tupdesc, values, nulls);
+	}
+	else
+	{
+		values = NULL;
+		nulls = NULL;
+	}
 
 	for (i = 0, j = 0; i < ncolumns; ++i)
 	{
@@ -716,7 +769,7 @@ hstore_from_record(PG_FUNCTION_ARGS)
 		pairs[j].key = NameStr(tupdesc->attrs[i]->attname);
 		pairs[j].keylen = hstoreCheckKeyLen(strlen(NameStr(tupdesc->attrs[i]->attname)));
 
-		if (nulls[i])
+		if (!nulls || nulls[i])
 		{
 			pairs[j].val = NULL;
 			pairs[j].vallen = 4;
@@ -790,6 +843,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	{
 		if (PG_ARGISNULL(1))
 			PG_RETURN_NULL();
+
 		rec = NULL;
 
 		/* have no tuple to look at, so the only source of type info
@@ -803,13 +857,13 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	{
 		rec = PG_GETARG_HEAPTUPLEHEADER(0);
 
+		if (PG_ARGISNULL(1))
+			PG_RETURN_POINTER(rec);
+
 		/* Extract type info from the tuple itself */
 		tupType = HeapTupleHeaderGetTypeId(rec);
 		tupTypmod = HeapTupleHeaderGetTypMod(rec);
 	}
-
-	if (PG_ARGISNULL(1))
-		PG_RETURN_POINTER(rec);
 
 	hs = PG_GETARG_HS(1);
 	entries = ARRPTR(hs);
