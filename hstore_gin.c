@@ -1,5 +1,5 @@
 /*
- * $PostgreSQL: pgsql/contrib/hstore/hstore_gin.c,v 1.4 2008/05/12 00:00:42 alvherre Exp $
+ * $PostgreSQL: pgsql/contrib/hstore/hstore_gin.c,v 1.6 2009/06/11 14:48:51 momjian Exp $
  */
 #include "postgres.h"
 
@@ -140,12 +140,65 @@ gin_extract_hstore_query(PG_FUNCTION_ARGS)
 PG_FUNCTION_INFO_V1(gin_consistent_hstore);
 Datum		gin_consistent_hstore(PG_FUNCTION_ARGS);
 
+#if PG_VERSION_NUM >= 80400
+
 Datum
 gin_consistent_hstore(PG_FUNCTION_ARGS)
 {
 	bool	   *check = (bool *) PG_GETARG_POINTER(0);
 	StrategyNumber strategy = PG_GETARG_UINT16(1);
-	bool	   *recheck = (bool *) PG_GETARG_POINTER(3);
+	bool		res = true;
+	int32		nkeys = PG_GETARG_INT32(3);
+	bool	   *recheck = (bool *) PG_GETARG_POINTER(5);
+
+	*recheck = false;
+
+	if (strategy == HStoreContainsStrategyNumber)
+	{
+		int			i;
+
+		/*
+		 * Index lost information about correspondence of keys and values, so
+		 * we need recheck (pre-8.4 this is handled at SQL level)
+		 */
+		*recheck = true;
+		for (i = 0; res && i < nkeys; i++)
+			if (check[i] == false)
+				res = false;
+	}
+	else if (strategy == HStoreExistsStrategyNumber)
+	{
+		/* Existence of key is guaranteed */
+		res = true;
+	}
+	else if (strategy == HStoreExistsAnyStrategyNumber)
+	{
+		/* Existence of key is guaranteed */
+		res = true;
+	}
+	else if (strategy == HStoreExistsAllStrategyNumber)
+	{
+		int        i;
+
+		for (i = 0; res && i < nkeys; ++i)
+			if (!check[i])
+				res = false;
+
+		/* Existence of key is guaranteed */
+	}
+	else
+		elog(ERROR, "Unsupported strategy number: %d", strategy);
+
+	PG_RETURN_BOOL(res);
+}
+
+#else
+
+Datum
+gin_consistent_hstore(PG_FUNCTION_ARGS)
+{
+	bool	   *check = (bool *) PG_GETARG_POINTER(0);
+	StrategyNumber strategy = PG_GETARG_UINT16(1);
 	bool		res = true;
 
 	if (strategy == HStoreContainsStrategyNumber)
@@ -157,7 +210,6 @@ gin_consistent_hstore(PG_FUNCTION_ARGS)
 		 * Index lost information about correspondence of keys
 		 * and values, so we need recheck
 		 */
-		*recheck = true;
 		for (i = 0; res && i < 2 * query->size; i++)
 			if (check[i] == false)
 				res = false;
@@ -165,13 +217,11 @@ gin_consistent_hstore(PG_FUNCTION_ARGS)
 	else if (strategy == HStoreExistsStrategyNumber)
 	{
 		/* Existence of key is guaranteed */
-		*recheck = false;
 		res = true;
 	}
 	else if (strategy == HStoreExistsAnyStrategyNumber)
 	{
 		/* Existence of key is guaranteed */
-		*recheck = false;
 		res = true;
 	}
 	else if (strategy == HStoreExistsAllStrategyNumber)
@@ -202,10 +252,11 @@ gin_consistent_hstore(PG_FUNCTION_ARGS)
 		}
 
 		/* Existence of key is guaranteed */
-		*recheck = false;
 	}
 	else
 		elog(ERROR, "Unsupported strategy number: %d", strategy);
 
 	PG_RETURN_BOOL(res);
 }
+
+#endif

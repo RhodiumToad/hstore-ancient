@@ -1,4 +1,4 @@
-/* $Id: hstore-new.sql.in,v 1.1 2009/03/24 16:13:09 andrewsn Exp $ */
+/* $Id: hstore-new.sql.in,v 1.2 2009/06/20 20:37:26 andrewsn Exp $ */
 
 -- slightly modified from the contrib/ version for safety
 
@@ -468,12 +468,12 @@ LANGUAGE C IMMUTABLE;
 CREATE OPERATOR CLASS gist_hstore_ops
 DEFAULT FOR TYPE hstore USING gist
 AS
-       	OPERATOR        7       @> ,
-       	OPERATOR        9       ?(hstore,text) ,
-	OPERATOR        10      ?|(hstore,text[]),
-	OPERATOR        11      ?&(hstore,text[]),
+       	OPERATOR        7       @> RECHECK,
+       	OPERATOR        9       ?(hstore,text) RECHECK,
+	OPERATOR        10      ?|(hstore,text[]) RECHECK,
+	OPERATOR        11      ?&(hstore,text[]) RECHECK,
         --OPERATOR        8       <@ ,
-        OPERATOR        13      @ ,
+        OPERATOR        13      @ RECHECK,
         --OPERATOR        14      ~ ,
         FUNCTION        1       ghstore_consistent (internal, internal, int, oid, internal),
         FUNCTION        2       ghstore_union (internal, internal),
@@ -504,7 +504,7 @@ LANGUAGE C IMMUTABLE;
 CREATE OPERATOR CLASS gin_hstore_ops
 DEFAULT FOR TYPE hstore USING gin
 AS
-	OPERATOR        7       @> ,
+	OPERATOR        7       @> RECHECK,
 	OPERATOR        9       ?(hstore,text),
 	OPERATOR        10      ?|(hstore,text[]),
 	OPERATOR        11      ?&(hstore,text[]),

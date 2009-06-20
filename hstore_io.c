@@ -1,5 +1,5 @@
 /*
- * $PostgreSQL: pgsql/contrib/hstore/hstore_io.c,v 1.9 2009/03/15 22:05:17 tgl Exp $
+ * $PostgreSQL: pgsql/contrib/hstore/hstore_io.c,v 1.11 2009/06/11 14:48:51 momjian Exp $
  */
 #include "postgres.h"
 #include "catalog/pg_type.h"
@@ -32,7 +32,7 @@ typedef struct
 	Pairs	   *pairs;
 	int			pcur;
 	int			plen;
-}	HSParser;
+} HSParser;
 
 #define RESIZEPRSBUF \
 do { \
@@ -53,7 +53,7 @@ do { \
 #define GV_WAITESCESCIN 4
 
 static bool
-get_val(HSParser * state, bool ignoreeq, bool *escaped)
+get_val(HSParser *state, bool ignoreeq, bool *escaped)
 {
 	int			st = GV_WAITVAL;
 
@@ -177,7 +177,7 @@ get_val(HSParser * state, bool ignoreeq, bool *escaped)
 
 
 static void
-parse_hstore(HSParser * state)
+parse_hstore(HSParser *state)
 {
 	int			st = WKEY;
 	bool		escaped = false;
@@ -305,7 +305,7 @@ comparePairs(const void *a, const void *b)
  */
 
 int
-hstoreUniquePairs(Pairs * a, int4 l, int4 *buflen)
+hstoreUniquePairs(Pairs *a, int4 l, int4 *buflen)
 {
 	Pairs	   *ptr,
 			   *res;
@@ -348,7 +348,7 @@ hstoreUniquePairs(Pairs * a, int4 l, int4 *buflen)
 
 #if 0   /* this superfluous code was >15% of hstore_in's runtime. */
 static void
-freeHSParse(HSParser * state)
+freeHSParse(HSParser *state)
 {
 	int			i;
 

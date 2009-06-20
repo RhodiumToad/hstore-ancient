@@ -1,5 +1,5 @@
 /*
- * $PostgreSQL: pgsql/contrib/hstore/hstore.h,v 1.7 2009/03/15 22:05:17 tgl Exp $
+ * $PostgreSQL: pgsql/contrib/hstore/hstore.h,v 1.8 2009/06/11 14:48:51 momjian Exp $
  */
 #ifndef __HSTORE_H__
 #define __HSTORE_H__
@@ -15,7 +15,7 @@
 typedef struct
 {
 	uint32  entry;
-}	HEntry;
+} HEntry;
 
 #define HENTRY_ISFIRST 0x80000000
 #define HENTRY_ISNULL  0x40000000
@@ -33,7 +33,7 @@ typedef struct
 	int32		vl_len_;		/* varlena header (do not touch directly!) */
 	int4		size;
     /* array of HEntry follows */
-}	HStore;
+} HStore;
 
 #define HSHRDSIZE	(sizeof(HStore))
 #define CALCDATASIZE(x, lenstr) ( (x) * 2 * sizeof(HEntry) + HSHRDSIZE + (lenstr) )
@@ -121,13 +121,13 @@ typedef struct
 	size_t		vallen;
 	bool		isnull;
 	bool		needfree;
-}	Pairs;
+} Pairs;
 
 int			hstoreUniquePairs(Pairs * a, int4 l, int4 *buflen);
 HStore *    hstorePairs(Pairs *pairs, int4 pcount, int4 buflen);
 
-size_t      hstoreCheckKeyLen(size_t len);
-size_t      hstoreCheckValLen(size_t len);
+size_t		hstoreCheckKeyLen(size_t len);
+size_t		hstoreCheckValLen(size_t len);
 
 int         hstoreFindKey(HStore * hs, int *lowbound, char *key, int keylen);
 Pairs *     hstoreArrayToPairs(ArrayType *a, int* npairs);
@@ -154,4 +154,4 @@ Pairs *     hstoreArrayToPairs(ArrayType *a, int* npairs);
 #define HSTORE_POLLUTE(newname_,oldname_)
 #endif
 
-#endif /* __HSTORE_H__ */
+#endif   /* __HSTORE_H__ */

@@ -58,4 +58,12 @@ adds the following additions:
 INSTALLATION
 ============
 
-(todo)
+Compile and install the module as follows (ensuring that the pg_config
+program for the installed server version is on your PATH):
+
+    gmake install
+
+Note that this installs the module under the name "hstore-new.so" to
+avoid overwriting any previous hstore.so module. This step is safe to
+perform even if you have existing hstore data.
+
