@@ -7,5 +7,6 @@ DATA = uninstall_hstore-new.sql
 REGRESS = hstore
 DOCS = README.hstore-new
 
-PGXS = $(shell pg_config --pgxs)
+PG_CONFIG = pg_config
+PGXS = $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
