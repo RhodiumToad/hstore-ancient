@@ -675,6 +675,12 @@ select 'a=>g, b=>c'::hstore || ( 'b'=>NULL );
  "a"=>"g", "b"=>NULL
 (1 row)
 
+select ('a=>g, b=>c'::hstore || ( NULL=>'b' )) is null;
+ ?column? 
+----------
+ t
+(1 row)
+
 -- => arrays
 select ARRAY['a','b','asd'] => ARRAY['g','h','i'];
             ?column?            
@@ -730,6 +736,22 @@ select hstore 'aa=>1, b=>2, c=>3' => ARRAY['c','b','aa'];
  "b"=>"2", "c"=>"3", "aa"=>"1"
 (1 row)
 
+select quote_literal('{}'::text[] => '{}'::text[]);
+ quote_literal 
+---------------
+ ''
+(1 row)
+
+select quote_literal('{}'::text[] => null);
+ quote_literal 
+---------------
+ ''
+(1 row)
+
+select ARRAY['a'] => '{}'::text[];  -- error
+ERROR:  cannot construct hstore from arrays of differing bounds
+select '{}'::text[] => ARRAY['a'];  -- error
+ERROR:  cannot construct hstore from arrays of differing bounds
 -- records
 select hstore(v) from (values (1, 'foo', 1.2, 3::float8)) v(a,b,c,d);
                      hstore                     
@@ -775,10 +797,22 @@ select populate_record(v, ('b' => 'foo') || ('a' => '123')) from testhstore1 v;
  (123,foo,1.2,3)
 (1 row)
 
-select populate_record(null::testhstore1, ('c' => '3.45') || ('a' => '123')) from testhstore1 v;
+select populate_record(v, '') from testhstore1 v;
+ populate_record 
+-----------------
+ (1,foo,1.2,3)
+(1 row)
+
+select populate_record(null::testhstore1, ('c' => '3.45') || ('a' => '123'));
  populate_record 
 -----------------
  (123,,3.45,)
+(1 row)
+
+select populate_record(null::testhstore1, '');
+ populate_record 
+-----------------
+ 
 (1 row)
 
 select v #= ('c' => '3.45') from testhstore1 v;
@@ -805,10 +839,22 @@ select v #= (('b' => 'foo') || ('a' => '123')) from testhstore1 v;
  (123,foo,1.2,3)
 (1 row)
 
-select null::testhstore1 #= (('c' => '3.45') || ('a' => '123')) from testhstore1 v;
+select v #= hstore '' from testhstore1 v;
+   ?column?    
+---------------
+ (1,foo,1.2,3)
+(1 row)
+
+select null::testhstore1 #= (('c' => '3.45') || ('a' => '123'));
    ?column?   
 --------------
  (123,,3.45,)
+(1 row)
+
+select null::testhstore1 #= hstore '';
+ ?column? 
+----------
+ 
 (1 row)
 
 select v #= h from testhstore1 v, (values (hstore 'a=>123',1),('b=>foo,c=>3.21',2),('a=>null',3),('e=>blah',4)) x(h,i) order by i;
