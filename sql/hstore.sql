@@ -148,6 +148,7 @@ select 'a=>g, b=>c'::hstore || ( 'asd'=>'gf' );
 select 'a=>g, b=>c'::hstore || ( 'b'=>'gf' );
 select 'a=>g, b=>c'::hstore || ( 'b'=>'NULL' );
 select 'a=>g, b=>c'::hstore || ( 'b'=>NULL );
+select ('a=>g, b=>c'::hstore || ( NULL=>'b' )) is null;
 
 -- => arrays
 select ARRAY['a','b','asd'] => ARRAY['g','h','i'];
@@ -159,6 +160,10 @@ select hstore 'aa=>1, b=>2, c=>3' => ARRAY['g','h','i'];
 select hstore 'aa=>1, b=>2, c=>3' => ARRAY['c','b'];
 select hstore 'aa=>1, b=>2, c=>3' => ARRAY['aa','b'];
 select hstore 'aa=>1, b=>2, c=>3' => ARRAY['c','b','aa'];
+select quote_literal('{}'::text[] => '{}'::text[]);
+select quote_literal('{}'::text[] => null);
+select ARRAY['a'] => '{}'::text[];  -- error
+select '{}'::text[] => ARRAY['a'];  -- error
 
 -- records
 select hstore(v) from (values (1, 'foo', 1.2, 3::float8)) v(a,b,c,d);
@@ -170,12 +175,16 @@ select populate_record(v, ('c' => '3.45')) from testhstore1 v;
 select populate_record(v, ('d' => '3.45')) from testhstore1 v;
 select populate_record(v, ('c' => null)) from testhstore1 v;
 select populate_record(v, ('b' => 'foo') || ('a' => '123')) from testhstore1 v;
-select populate_record(null::testhstore1, ('c' => '3.45') || ('a' => '123')) from testhstore1 v;
+select populate_record(v, '') from testhstore1 v;
+select populate_record(null::testhstore1, ('c' => '3.45') || ('a' => '123'));
+select populate_record(null::testhstore1, '');
 select v #= ('c' => '3.45') from testhstore1 v;
 select v #= ('d' => '3.45') from testhstore1 v;
 select v #= ('c' => null) from testhstore1 v;
 select v #= (('b' => 'foo') || ('a' => '123')) from testhstore1 v;
-select null::testhstore1 #= (('c' => '3.45') || ('a' => '123')) from testhstore1 v;
+select v #= hstore '' from testhstore1 v;
+select null::testhstore1 #= (('c' => '3.45') || ('a' => '123'));
+select null::testhstore1 #= hstore '';
 select v #= h from testhstore1 v, (values (hstore 'a=>123',1),('b=>foo,c=>3.21',2),('a=>null',3),('e=>blah',4)) x(h,i) order by i;
 
 -- keys/values

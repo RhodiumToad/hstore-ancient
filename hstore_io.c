@@ -563,7 +563,11 @@ hstore_from_arrays(PG_FUNCTION_ARGS)
 
 	Assert(ARR_ELEMTYPE(key_array) == TEXTOID);
 
-	if (ARR_NDIM(key_array) != 1)
+	/* must check >1 rather than != 1 because empty arrays have
+	 * 0 dimensions, not 1
+	 */
+
+	if (ARR_NDIM(key_array) > 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
 				 errmsg("wrong number of array subscripts")));
@@ -587,13 +591,15 @@ hstore_from_arrays(PG_FUNCTION_ARGS)
 
 		Assert(ARR_ELEMTYPE(value_array) == TEXTOID);
 
-		if (ARR_NDIM(value_array) != 1)
+		if (ARR_NDIM(value_array) > 1)
 			ereport(ERROR,
 					(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
 					 errmsg("wrong number of array subscripts")));
 
-		if (ARR_DIMS(key_array)[0] != ARR_DIMS(value_array)[0]
-			|| ARR_LBOUND(key_array)[0] != ARR_LBOUND(value_array)[0])
+		if ((ARR_NDIM(key_array) > 0 || ARR_NDIM(value_array) > 0)
+			&& (ARR_NDIM(key_array) != ARR_NDIM(value_array)
+				|| ARR_DIMS(key_array)[0] != ARR_DIMS(value_array)[0]
+				|| ARR_LBOUND(key_array)[0] != ARR_LBOUND(value_array)[0]))
 			ereport(ERROR,
 					(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
 					 errmsg("cannot construct hstore from arrays of differing bounds")));
@@ -870,7 +876,12 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	ptr = STRPTR(hs);
 
 	if (hs->size == 0)
-		PG_RETURN_POINTER(rec);
+	{
+		if (rec)
+			PG_RETURN_POINTER(rec);
+		else
+			PG_RETURN_NULL();
+	}
 
 	tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
 	ncolumns = tupdesc->natts;
