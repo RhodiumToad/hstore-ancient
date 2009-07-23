@@ -484,7 +484,7 @@ hstore_concat(PG_FUNCTION_ARGS)
 	int         s2count = s2->size;
 	int         outcount = 0;
 
-	SET_VARSIZE(out, VARSIZE(s1) + VARSIZE(s2));
+	SET_VARSIZE(out, VARSIZE(s1) + VARSIZE(s2) - HSHRDSIZE);
 	out->size = s1count + s2count;
 
 	ps1 = STRPTR(s1);

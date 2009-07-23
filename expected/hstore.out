@@ -497,6 +497,13 @@ select 'a=>1 , b=>2, c=>3'::hstore - 'd'::text;
  "a"=>"1", "b"=>"2", "c"=>"3"
 (1 row)
 
+select pg_column_size('a=>1 , b=>2, c=>3'::hstore - 'b'::text)
+         = pg_column_size('a=>1, b=>2'::hstore);
+ ?column? 
+----------
+ t
+(1 row)
+
 -- delete (array)
 select delete('a=>1 , b=>2, c=>3'::hstore, ARRAY['d','e']);
             delete            
@@ -556,6 +563,13 @@ select 'a=>1 , b=>2, c=>3'::hstore - '{}'::text[];
            ?column?           
 ------------------------------
  "a"=>"1", "b"=>"2", "c"=>"3"
+(1 row)
+
+select pg_column_size('a=>1 , b=>2, c=>3'::hstore - ARRAY['a','c'])
+         = pg_column_size('b=>2'::hstore);
+ ?column? 
+----------
+ t
 (1 row)
 
 -- delete (hstore)
@@ -619,6 +633,13 @@ select 'aa=>1 , b=>2, c=>3'::hstore - ''::hstore;
  "b"=>"2", "c"=>"3", "aa"=>"1"
 (1 row)
 
+select pg_column_size('a=>1 , b=>2, c=>3'::hstore - 'b=>2'::hstore)
+         = pg_column_size('a=>1, c=>3'::hstore);
+ ?column? 
+----------
+ t
+(1 row)
+
 -- ||
 select 'aa=>1 , b=>2, cq=>3'::hstore || 'cq=>l, b=>g, fg=>f';
                  ?column?                  
@@ -650,6 +671,19 @@ select ''::hstore || 'cq=>l, b=>g, fg=>f';
  "b"=>"g", "cq"=>"l", "fg"=>"f"
 (1 row)
 
+select pg_column_size(''::hstore || ''::hstore) = pg_column_size(''::hstore);
+ ?column? 
+----------
+ t
+(1 row)
+
+select pg_column_size('aa=>1'::hstore || 'b=>2'::hstore)
+         = pg_column_size('aa=>1, b=>2'::hstore);
+ ?column? 
+----------
+ t
+(1 row)
+
 -- =>
 select 'a=>g, b=>c'::hstore || ( 'asd'=>'gf' );
             ?column?             
@@ -676,6 +710,20 @@ select 'a=>g, b=>c'::hstore || ( 'b'=>NULL );
 (1 row)
 
 select ('a=>g, b=>c'::hstore || ( NULL=>'b' )) is null;
+ ?column? 
+----------
+ t
+(1 row)
+
+select pg_column_size(('b'=>'gf'))
+         = pg_column_size('b=>gf'::hstore);
+ ?column? 
+----------
+ t
+(1 row)
+
+select pg_column_size('a=>g, b=>c'::hstore || ('b'=>'gf'))
+         = pg_column_size('a=>g, b=>gf'::hstore);
  ?column? 
 ----------
  t
@@ -752,6 +800,27 @@ select ARRAY['a'] => '{}'::text[];  -- error
 ERROR:  cannot construct hstore from arrays of differing bounds
 select '{}'::text[] => ARRAY['a'];  -- error
 ERROR:  cannot construct hstore from arrays of differing bounds
+select pg_column_size(ARRAY['a','b','asd'] => ARRAY['g','h','i'])
+         = pg_column_size('a=>g, b=>h, asd=>i'::hstore);
+ ?column? 
+----------
+ t
+(1 row)
+
+select pg_column_size(hstore 'aa=>1, b=>2, c=>3' => ARRAY['c','b'])
+         = pg_column_size('b=>2, c=>3'::hstore);
+ ?column? 
+----------
+ t
+(1 row)
+
+select pg_column_size(hstore 'aa=>1, b=>2, c=>3' => ARRAY['c','b','aa'])
+         = pg_column_size('aa=>1, b=>2, c=>3'::hstore);
+ ?column? 
+----------
+ t
+(1 row)
+
 -- records
 select hstore(v) from (values (1, 'foo', 1.2, 3::float8)) v(a,b,c,d);
                      hstore                     
@@ -771,6 +840,14 @@ select hstore(null::testhstore1);
                    hstore                   
 --------------------------------------------
  "a"=>NULL, "b"=>NULL, "c"=>NULL, "d"=>NULL
+(1 row)
+
+select pg_column_size(hstore(v))
+         = pg_column_size('a=>1, b=>"foo", c=>"1.2", d=>"3"'::hstore)
+  from testhstore1 v;
+ ?column? 
+----------
+ t
 (1 row)
 
 select populate_record(v, ('c' => '3.45')) from testhstore1 v;
@@ -1188,6 +1265,12 @@ select count(*) from (select h from (select * from testhstore union all select *
  count 
 -------
    885
+(1 row)
+
+select distinct * from (values (hstore '' || ''),('')) v(h);
+ h 
+---
+ 
 (1 row)
 
 set enable_sort = true;

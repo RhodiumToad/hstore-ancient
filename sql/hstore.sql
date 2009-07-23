@@ -109,6 +109,8 @@ select 'a=>null , b=>2, c=>3'::hstore - 'a'::text;
 select 'a=>1 , b=>2, c=>3'::hstore - 'b'::text;
 select 'a=>1 , b=>2, c=>3'::hstore - 'c'::text;
 select 'a=>1 , b=>2, c=>3'::hstore - 'd'::text;
+select pg_column_size('a=>1 , b=>2, c=>3'::hstore - 'b'::text)
+         = pg_column_size('a=>1, b=>2'::hstore);
 
 -- delete (array)
 
@@ -122,6 +124,8 @@ select 'a=>1 , b=>2, c=>3'::hstore - ARRAY['d','b'];
 select 'a=>1 , b=>2, c=>3'::hstore - ARRAY['a','c'];
 select 'a=>1 , b=>2, c=>3'::hstore - ARRAY[['b'],['c'],['a']];
 select 'a=>1 , b=>2, c=>3'::hstore - '{}'::text[];
+select pg_column_size('a=>1 , b=>2, c=>3'::hstore - ARRAY['a','c'])
+         = pg_column_size('b=>2'::hstore);
 
 -- delete (hstore)
 
@@ -135,6 +139,8 @@ select 'aa=>1 , b=>2, c=>3'::hstore - 'aa=>NULL, c=>3'::hstore;
 select 'aa=>1 , b=>2, c=>3'::hstore - 'aa=>1, b=>2, c=>3'::hstore;
 select 'aa=>1 , b=>2, c=>3'::hstore - 'b=>2'::hstore;
 select 'aa=>1 , b=>2, c=>3'::hstore - ''::hstore;
+select pg_column_size('a=>1 , b=>2, c=>3'::hstore - 'b=>2'::hstore)
+         = pg_column_size('a=>1, c=>3'::hstore);
 
 -- ||
 select 'aa=>1 , b=>2, cq=>3'::hstore || 'cq=>l, b=>g, fg=>f';
@@ -142,6 +148,9 @@ select 'aa=>1 , b=>2, cq=>3'::hstore || 'aq=>l';
 select 'aa=>1 , b=>2, cq=>3'::hstore || 'aa=>l';
 select 'aa=>1 , b=>2, cq=>3'::hstore || '';
 select ''::hstore || 'cq=>l, b=>g, fg=>f';
+select pg_column_size(''::hstore || ''::hstore) = pg_column_size(''::hstore);
+select pg_column_size('aa=>1'::hstore || 'b=>2'::hstore)
+         = pg_column_size('aa=>1, b=>2'::hstore);
 
 -- =>
 select 'a=>g, b=>c'::hstore || ( 'asd'=>'gf' );
@@ -149,6 +158,10 @@ select 'a=>g, b=>c'::hstore || ( 'b'=>'gf' );
 select 'a=>g, b=>c'::hstore || ( 'b'=>'NULL' );
 select 'a=>g, b=>c'::hstore || ( 'b'=>NULL );
 select ('a=>g, b=>c'::hstore || ( NULL=>'b' )) is null;
+select pg_column_size(('b'=>'gf'))
+         = pg_column_size('b=>gf'::hstore);
+select pg_column_size('a=>g, b=>c'::hstore || ('b'=>'gf'))
+         = pg_column_size('a=>g, b=>gf'::hstore);
 
 -- => arrays
 select ARRAY['a','b','asd'] => ARRAY['g','h','i'];
@@ -164,6 +177,12 @@ select quote_literal('{}'::text[] => '{}'::text[]);
 select quote_literal('{}'::text[] => null);
 select ARRAY['a'] => '{}'::text[];  -- error
 select '{}'::text[] => ARRAY['a'];  -- error
+select pg_column_size(ARRAY['a','b','asd'] => ARRAY['g','h','i'])
+         = pg_column_size('a=>g, b=>h, asd=>i'::hstore);
+select pg_column_size(hstore 'aa=>1, b=>2, c=>3' => ARRAY['c','b'])
+         = pg_column_size('b=>2, c=>3'::hstore);
+select pg_column_size(hstore 'aa=>1, b=>2, c=>3' => ARRAY['c','b','aa'])
+         = pg_column_size('aa=>1, b=>2, c=>3'::hstore);
 
 -- records
 select hstore(v) from (values (1, 'foo', 1.2, 3::float8)) v(a,b,c,d);
@@ -171,6 +190,9 @@ create table testhstore1 (a integer, b text, c numeric, d float8);
 insert into testhstore1 values (1, 'foo', 1.2, 3::float8);
 select hstore(v) from testhstore1 v;
 select hstore(null::testhstore1);
+select pg_column_size(hstore(v))
+         = pg_column_size('a=>1, b=>"foo", c=>"1.2", d=>"3"'::hstore)
+  from testhstore1 v;
 select populate_record(v, ('c' => '3.45')) from testhstore1 v;
 select populate_record(v, ('d' => '3.45')) from testhstore1 v;
 select populate_record(v, ('c' => null)) from testhstore1 v;
@@ -263,6 +285,7 @@ select count(*) from (select h from (select * from testhstore union all select *
 set enable_hashagg = true;
 set enable_sort = false;
 select count(*) from (select h from (select * from testhstore union all select * from testhstore) hs group by h) hs2;
+select distinct * from (values (hstore '' || ''),('')) v(h);
 set enable_sort = true;
 
 -- btree
