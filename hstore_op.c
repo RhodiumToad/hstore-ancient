@@ -323,6 +323,7 @@ hstore_delete_array(PG_FUNCTION_ARGS)
 	{
 		/* return a copy of the input, unchanged */
 		memcpy(out, hs, VARSIZE(hs));
+		HS_FIXSIZE(out, hs_count);
 		PG_RETURN_POINTER(out);
 	}
 
@@ -402,6 +403,7 @@ hstore_delete_hstore(PG_FUNCTION_ARGS)
 	{
 		/* return a copy of the input, unchanged */
 		memcpy(out, hs, VARSIZE(hs));
+		HS_FIXSIZE(out, hs_count);
 		PG_RETURN_POINTER(out);
 	}
 
@@ -486,6 +488,22 @@ hstore_concat(PG_FUNCTION_ARGS)
 
 	SET_VARSIZE(out, VARSIZE(s1) + VARSIZE(s2) - HSHRDSIZE);
 	out->size = s1count + s2count;
+
+	if (s1count == 0)
+	{
+		/* return a copy of the input, unchanged */
+		memcpy(out, s2, VARSIZE(s2));
+		HS_FIXSIZE(out, s2count);
+		PG_RETURN_POINTER(out);
+	}
+
+	if (s2count == 0)
+	{
+		/* return a copy of the input, unchanged */
+		memcpy(out, s1, VARSIZE(s1));
+		HS_FIXSIZE(out, s1count);
+		PG_RETURN_POINTER(out);
+	}
 
 	ps1 = STRPTR(s1);
 	ps2 = STRPTR(s2);

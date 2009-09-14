@@ -99,17 +99,23 @@ typedef struct
 /* finalize a newly-constructed hstore */
 #define HS_FINALIZE(hsp_,count_,buf_,ptr_)							\
 	do {															\
+		int	buflen = (ptr_) - (buf_);								\
 		if ((count_))												\
 			ARRPTR(hsp_)[0].entry |= HENTRY_ISFIRST;				\
 		if ((count_) != (hsp_)->size)								\
 		{															\
-			int	buflen = (ptr_) - (buf_);							\
 			(hsp_)->size = (count_);								\
 			memmove(STRPTR(hsp_), (buf_), buflen);					\
-			SET_VARSIZE((hsp_), CALCDATASIZE((count_), buflen));	\
 		}															\
+		SET_VARSIZE((hsp_), CALCDATASIZE((count_), buflen));		\
 	} while (0)
 
+/* ensure the varlena size of an existing hstore is correct */
+#define HS_FIXSIZE(hsp_,count_)											\
+	do {																\
+		int bl = (count_) ? HSE_ENDPOS(ARRPTR(hsp_)[2*(count_)-1]) : 0;	\
+		SET_VARSIZE((hsp_), CALCDATASIZE((count_),bl));					\
+	} while (0)
 
 #define PG_GETARG_HS(x) ((HStore*)PG_DETOAST_DATUM(PG_GETARG_DATUM(x)))
 

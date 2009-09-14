@@ -126,6 +126,8 @@ select 'a=>1 , b=>2, c=>3'::hstore - ARRAY[['b'],['c'],['a']];
 select 'a=>1 , b=>2, c=>3'::hstore - '{}'::text[];
 select pg_column_size('a=>1 , b=>2, c=>3'::hstore - ARRAY['a','c'])
          = pg_column_size('b=>2'::hstore);
+select pg_column_size('a=>1 , b=>2, c=>3'::hstore - '{}'::text[])
+         = pg_column_size('a=>1, b=>2, c=>3'::hstore);
 
 -- delete (hstore)
 
@@ -141,6 +143,8 @@ select 'aa=>1 , b=>2, c=>3'::hstore - 'b=>2'::hstore;
 select 'aa=>1 , b=>2, c=>3'::hstore - ''::hstore;
 select pg_column_size('a=>1 , b=>2, c=>3'::hstore - 'b=>2'::hstore)
          = pg_column_size('a=>1, c=>3'::hstore);
+select pg_column_size('a=>1 , b=>2, c=>3'::hstore - ''::hstore)
+         = pg_column_size('a=>1, b=>2, c=>3'::hstore);
 
 -- ||
 select 'aa=>1 , b=>2, cq=>3'::hstore || 'cq=>l, b=>g, fg=>f';
@@ -150,6 +154,10 @@ select 'aa=>1 , b=>2, cq=>3'::hstore || '';
 select ''::hstore || 'cq=>l, b=>g, fg=>f';
 select pg_column_size(''::hstore || ''::hstore) = pg_column_size(''::hstore);
 select pg_column_size('aa=>1'::hstore || 'b=>2'::hstore)
+         = pg_column_size('aa=>1, b=>2'::hstore);
+select pg_column_size('aa=>1, b=>2'::hstore || ''::hstore)
+         = pg_column_size('aa=>1, b=>2'::hstore);
+select pg_column_size(''::hstore || 'aa=>1, b=>2'::hstore)
          = pg_column_size('aa=>1, b=>2'::hstore);
 
 -- =>
