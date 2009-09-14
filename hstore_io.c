@@ -875,13 +875,14 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	entries = ARRPTR(hs);
 	ptr = STRPTR(hs);
 
-	if (hs->size == 0)
-	{
-		if (rec)
-			PG_RETURN_POINTER(rec);
-		else
-			PG_RETURN_NULL();
-	}
+	/*
+	 * if the input hstore is empty, we can only skip the rest if
+	 * we were passed in a non-null record, since otherwise there
+	 * may be issues with domain nulls.
+	 */
+
+	if (hs->size == 0 && rec)
+		PG_RETURN_POINTER(rec);
 
 	tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
 	ncolumns = tupdesc->natts;
@@ -958,14 +959,17 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 		idx = hstoreFindKey(hs, 0,
 							NameStr(tupdesc->attrs[i]->attname),
 							strlen(NameStr(tupdesc->attrs[i]->attname)));
-		if (idx < 0)
+		/*
+		 * we can't just skip here if the key wasn't found since we
+		 * might have a domain to deal with. If we were passed in a
+		 * non-null record datum, we assume that the existing values
+		 * are valid (if they're not, then it's not our fault), but if
+		 * we were passed in a null, then every field which we don't
+		 * populate needs to be run through the input function just in
+		 * case it's a domain type.
+		 */
+		if (idx < 0 && rec)
 			continue;
-
-		if (HS_VALISNULL(entries,idx))
-		{
-			nulls[i] = true;
-			continue;
-		}
 
 		/*
 		 * Prepare to convert the column value from text
@@ -980,15 +984,29 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 			column_info->column_type = column_type;
 		}
 
-		vallen = HS_VALLEN(entries,idx);
-		value = palloc(1 + vallen);
-		memcpy(value, HS_VAL(entries,ptr,idx), vallen);
-		value[vallen] = 0;
+		if (idx < 0 || HS_VALISNULL(entries,idx))
+		{
+			/*
+			 * need InputFunctionCall to happen even for nulls, so
+			 * that domain checks are done
+			 */
+			values[i] = InputFunctionCall(&column_info->proc, NULL,
+										  column_info->typioparam,
+										  tupdesc->attrs[i]->atttypmod);
+			nulls[i] = true;
+		}
+		else
+		{
+			vallen = HS_VALLEN(entries,idx);
+			value = palloc(1 + vallen);
+			memcpy(value, HS_VAL(entries,ptr,idx), vallen);
+			value[vallen] = 0;
 
-		values[i] = InputFunctionCall(&column_info->proc, value,
-									  column_info->typioparam,
-									  tupdesc->attrs[i]->atttypmod);
-		nulls[i] = false;
+			values[i] = InputFunctionCall(&column_info->proc, value,
+										  column_info->typioparam,
+										  tupdesc->attrs[i]->atttypmod);
+			nulls[i] = false;
+		}
 	}
 
 	rettuple = heap_form_tuple(tupdesc, values, nulls);
