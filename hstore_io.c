@@ -400,7 +400,7 @@ hstorePairs(Pairs *pairs, int4 pcount, int4 buflen)
 	len = CALCDATASIZE(pcount, buflen);
 	out = palloc(len);
 	SET_VARSIZE(out, len);
-	out->size = pcount;
+	HS_SETCOUNT(out, pcount);
 
 	if (pcount == 0)
 		return out;
@@ -647,6 +647,93 @@ hstore_from_arrays(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(out);
 }
 
+
+PG_FUNCTION_INFO_V1(hstore_from_array);
+Datum		hstore_from_array(PG_FUNCTION_ARGS);
+Datum
+hstore_from_array(PG_FUNCTION_ARGS)
+{
+	ArrayType  *in_array = PG_GETARG_ARRAYTYPE_P(0);
+	int         ndims = ARR_NDIM(in_array);
+	int         count;
+	int4		buflen;
+	HStore	   *out;
+	Pairs	   *pairs;
+	Datum	   *in_datums;
+	bool	   *in_nulls;
+	int		    in_count;
+	int		    i;
+
+	Assert(ARR_ELEMTYPE(in_array) == TEXTOID);
+
+	switch (ndims)
+	{
+		case 0:
+			out = hstorePairs(NULL, 0, 0);
+			PG_RETURN_POINTER(out);
+
+		case 1:
+			if ((ARR_DIMS(in_array)[0]) % 2)
+				ereport(ERROR,
+						(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
+						 errmsg("cannot construct hstore from array of odd size")));
+			break;
+
+		case 2:
+			if ((ARR_DIMS(in_array)[1]) != 2)
+				ereport(ERROR,
+						(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
+						 errmsg("cannot construct hstore from 2-d array of this size")));
+			break;
+
+		default:
+			ereport(ERROR,
+					(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
+					 errmsg("wrong number of array subscripts")));
+	}			
+
+	deconstruct_array(in_array,
+					  TEXTOID, -1, false, 'i',
+					  &in_datums, &in_nulls, &in_count);
+
+	count = in_count / 2;
+
+	pairs = palloc(count * sizeof(Pairs));
+
+	for (i = 0; i < count; ++i)
+	{
+		if (in_nulls[i*2])
+			ereport(ERROR,
+					(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+					 errmsg("null value not allowed for hstore key")));
+
+		if (in_nulls[i*2+1])
+		{
+			pairs[i].key = VARDATA_ANY(in_datums[i*2]);
+			pairs[i].val = NULL;
+			pairs[i].keylen = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(in_datums[i*2]));
+			pairs[i].vallen = 4;
+			pairs[i].isnull = true;
+			pairs[i].needfree = false;
+		}
+		else
+		{
+			pairs[i].key = VARDATA_ANY(in_datums[i*2]);
+			pairs[i].val = VARDATA_ANY(in_datums[i*2+1]);
+			pairs[i].keylen = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(in_datums[i*2]));
+			pairs[i].vallen = hstoreCheckValLen(VARSIZE_ANY_EXHDR(in_datums[i*2+1]));
+			pairs[i].isnull = false;
+			pairs[i].needfree = false;
+		}
+	}
+
+	count = hstoreUniquePairs(pairs, count, &buflen);
+
+	out = hstorePairs(pairs, count, buflen);
+
+	PG_RETURN_POINTER(out);
+}
+
 /* most of hstore_from_record is shamelessly swiped from record_out */
 
 /*
@@ -881,7 +968,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	 * may be issues with domain nulls.
 	 */
 
-	if (hs->size == 0 && rec)
+	if (HS_COUNT(hs) == 0 && rec)
 		PG_RETURN_POINTER(rec);
 
 	tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
@@ -1039,13 +1126,13 @@ hstore_out(PG_FUNCTION_ARGS)
 	HStore	   *in = PG_GETARG_HS(0);
 	int			buflen,
 				i;
-	int        count = in->size;
+	int        count = HS_COUNT(in);
 	char	   *out,
 			   *ptr;
 	char	   *base = STRPTR(in);
 	HEntry	   *entries = ARRPTR(in);
 
-	if (in->size == 0)
+	if (count == 0)
 	{
 		out = palloc(1);
 		*out = '\0';
@@ -1094,7 +1181,7 @@ hstore_out(PG_FUNCTION_ARGS)
 			*ptr++ = '"';
 		}
 
-		if (i + 1 != in->size)
+		if (i + 1 != count)
 		{
 			*ptr++ = ',';
 			*ptr++ = ' ';
@@ -1113,7 +1200,7 @@ hstore_send(PG_FUNCTION_ARGS)
 {
 	HStore	   *in = PG_GETARG_HS(0);
 	int        i;
-	int        count = in->size;
+	int        count = HS_COUNT(in);
 	char	   *base = STRPTR(in);
 	HEntry	   *entries = ARRPTR(in);
 	StringInfoData buf;

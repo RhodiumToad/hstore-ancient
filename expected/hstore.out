@@ -849,6 +849,67 @@ select pg_column_size(hstore 'aa=>1, b=>2, c=>3' => ARRAY['c','b','aa'])
  t
 (1 row)
 
+-- array input
+select '{}'::text[]::hstore;
+ hstore 
+--------
+ 
+(1 row)
+
+select ARRAY['a','g','b','h','asd']::hstore;
+ERROR:  cannot construct hstore from array of odd size
+select ARRAY['a','g','b','h','asd','i']::hstore;
+             array              
+--------------------------------
+ "a"=>"g", "b"=>"h", "asd"=>"i"
+(1 row)
+
+select ARRAY[['a','g'],['b','h'],['asd','i']]::hstore;
+             array              
+--------------------------------
+ "a"=>"g", "b"=>"h", "asd"=>"i"
+(1 row)
+
+select ARRAY[['a','g','b'],['h','asd','i']]::hstore;
+ERROR:  cannot construct hstore from 2-d array of this size
+select ARRAY[[['a','g'],['b','h'],['asd','i']]]::hstore;
+ERROR:  wrong number of array subscripts
+select hstore('{}'::text[]);
+ hstore 
+--------
+ 
+(1 row)
+
+select hstore(ARRAY['a','g','b','h','asd']);
+ERROR:  cannot construct hstore from array of odd size
+select hstore(ARRAY['a','g','b','h','asd','i']);
+             hstore             
+--------------------------------
+ "a"=>"g", "b"=>"h", "asd"=>"i"
+(1 row)
+
+select hstore(ARRAY[['a','g'],['b','h'],['asd','i']]);
+             hstore             
+--------------------------------
+ "a"=>"g", "b"=>"h", "asd"=>"i"
+(1 row)
+
+select hstore(ARRAY[['a','g','b'],['h','asd','i']]);
+ERROR:  cannot construct hstore from 2-d array of this size
+select hstore(ARRAY[[['a','g'],['b','h'],['asd','i']]]);
+ERROR:  wrong number of array subscripts
+select hstore('[0:5]={a,g,b,h,asd,i}'::text[]);
+             hstore             
+--------------------------------
+ "a"=>"g", "b"=>"h", "asd"=>"i"
+(1 row)
+
+select hstore('[0:2][1:2]={{a,g},{b,h},{asd,i}}'::text[]);
+             hstore             
+--------------------------------
+ "a"=>"g", "b"=>"h", "asd"=>"i"
+(1 row)
+
 -- records
 select hstore(v) from (values (1, 'foo', 1.2, 3::float8)) v(a,b,c,d);
                      hstore                     
@@ -1078,6 +1139,30 @@ select avals('');
  avals 
 -------
  {}
+(1 row)
+
+select hstore_to_list('aa=>1, cq=>l, b=>g, fg=>NULL'::hstore);
+     hstore_to_list      
+-------------------------
+ {b,g,aa,1,cq,l,fg,NULL}
+(1 row)
+
+select %% 'aa=>1, cq=>l, b=>g, fg=>NULL';
+        ?column?         
+-------------------------
+ {b,g,aa,1,cq,l,fg,NULL}
+(1 row)
+
+select hstore_to_matrix('aa=>1, cq=>l, b=>g, fg=>NULL'::hstore);
+        hstore_to_matrix         
+---------------------------------
+ {{b,g},{aa,1},{cq,l},{fg,NULL}}
+(1 row)
+
+select %# 'aa=>1, cq=>l, b=>g, fg=>NULL';
+            ?column?             
+---------------------------------
+ {{b,g},{aa,1},{cq,l},{fg,NULL}}
 (1 row)
 
 select * from skeys('aa=>1 , b=>2, cq=>3'::hstore || 'cq=>l, b=>g, fg=>f');

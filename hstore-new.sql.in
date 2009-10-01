@@ -1,36 +1,52 @@
-/* $Id: hstore-new.sql.in,v 1.3 2009/06/20 23:17:16 andrewsn Exp $ */
+/* $Id: hstore-new.sql.in,v 1.4 2009/10/01 05:39:12 andrewsn Exp $ */
 
 -- slightly modified from the contrib/ version for safety
 
--- do NOT remove this. if an incompatible hstore is already installed,
--- we need this entire transaction to error out
-\set ON_ERROR_ROLLBACK 'off'
-BEGIN;
+-- allow caller to set the schema; if hstore_new_schema is already
+-- set, then we'll use it.
 
--- Adjust this setting to control where the objects get created.
-SET LOCAL search_path = public;
+\set hstore_new_default_schema 'public'
+\set _hack '\\set hstore_new_schema' :hstore_new_schema ' :hstore_new_default_schema'
+:_hack
+
+-- if an incompatible hstore is already installed, we need this entire
+-- transaction to error out. But we need an escape hatch to run the
+-- script inside an existing transaction for migration purposes; so
+-- if :hstore_xact is already defined as '--', then skip all the
+-- transaction stuff. (I really wish psql could be a bit smarter
+-- about this stuff.)
+
+\set _hack :hstore_new_xact '\\set ON_ERROR_ROLLBACK off'
+:_hack
+
+\set _hack :hstore_new_xact 'BEGIN;'
+:_hack
+
+-- Control where the objects get created.
+\set _hack :hstore_new_xact 'SET LOCAL search_path = :hstore_new_schema;'
+:_hack
 
 CREATE TYPE hstore;
 
 CREATE FUNCTION hstore_in(cstring)
 RETURNS hstore
 AS 'MODULE_PATHNAME'
-LANGUAGE C STRICT;
+LANGUAGE C STRICT IMMUTABLE;
 
 CREATE FUNCTION hstore_out(hstore)
 RETURNS cstring
 AS 'MODULE_PATHNAME'
-LANGUAGE C STRICT;
+LANGUAGE C STRICT IMMUTABLE;
 
 CREATE FUNCTION hstore_recv(internal)
 RETURNS hstore
 AS 'MODULE_PATHNAME'
-LANGUAGE C STRICT;
+LANGUAGE C STRICT IMMUTABLE;
 
 CREATE FUNCTION hstore_send(hstore)
 RETURNS bytea
 AS 'MODULE_PATHNAME'
-LANGUAGE C STRICT;
+LANGUAGE C STRICT IMMUTABLE;
 
 CREATE TYPE hstore (
         INTERNALLENGTH = -1,
@@ -40,6 +56,12 @@ CREATE TYPE hstore (
         SEND = hstore_send,
         STORAGE = extended
 );
+
+-- intentionally undocumented
+CREATE FUNCTION hstore_version_diag(hstore)
+RETURNS integer
+AS 'MODULE_PATHNAME','hstore_version_diag'
+LANGUAGE C STRICT IMMUTABLE;
 
 CREATE FUNCTION fetchval(hstore,text)
 RETURNS text
@@ -246,10 +268,38 @@ CREATE OPERATOR => (
 	PROCEDURE = hstore
 );
 
+CREATE FUNCTION hstore(text[])
+RETURNS hstore
+AS 'MODULE_PATHNAME', 'hstore_from_array'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE CAST (text[] AS hstore)
+  WITH FUNCTION hstore(text[]);
+
 CREATE FUNCTION hstore(record)
 RETURNS hstore
 AS 'MODULE_PATHNAME', 'hstore_from_record'
 LANGUAGE C IMMUTABLE; -- not STRICT; allows (null::recordtype)
+
+CREATE FUNCTION hstore_to_list(hstore)
+RETURNS text[]
+AS 'MODULE_PATHNAME','hstore_to_list'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR %% (
+	RIGHTARG = hstore,
+	PROCEDURE = hstore_to_list
+);
+
+CREATE FUNCTION hstore_to_matrix(hstore)
+RETURNS text[]
+AS 'MODULE_PATHNAME','hstore_to_matrix'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR %# (
+	RIGHTARG = hstore,
+	PROCEDURE = hstore_to_matrix
+);
 
 CREATE FUNCTION akeys(hstore)
 RETURNS _text
@@ -416,12 +466,12 @@ CREATE TYPE ghstore;
 CREATE FUNCTION ghstore_in(cstring)
 RETURNS ghstore
 AS 'MODULE_PATHNAME'
-LANGUAGE C STRICT;
+LANGUAGE C STRICT IMMUTABLE;
 
 CREATE FUNCTION ghstore_out(ghstore)
 RETURNS cstring
 AS 'MODULE_PATHNAME'
-LANGUAGE C STRICT;
+LANGUAGE C STRICT IMMUTABLE;
 
 CREATE TYPE ghstore (
         INTERNALLENGTH = -1,
@@ -514,6 +564,8 @@ AS
 	FUNCTION        4       gin_consistent_hstore(internal, int2, internal, internal),
 	STORAGE         text;
 
-COMMIT;
+-- commit (maybe)
+\set _hack :hstore_new_xact 'COMMIT;'
+:_hack
 
 --

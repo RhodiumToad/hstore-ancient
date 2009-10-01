@@ -1,7 +1,14 @@
 /* $PostgreSQL: pgsql/contrib/hstore/uninstall_hstore.sql,v 1.7 2008/04/14 17:05:32 tgl Exp $ */
 
--- Adjust this setting to control where the objects get dropped.
-SET search_path = public;
+-- allow caller to set the schema; if hstore_new_schema is already
+-- set, then we'll use it.
+
+\set hstore_new_default_schema 'public'
+\set _hack '\\set hstore_new_schema' :hstore_new_schema ' :hstore_new_default_schema'
+:_hack
+
+-- Control where the objects get dropped.
+SET search_path = :hstore_new_schema;
 
 DROP OPERATOR CLASS gist_hstore_ops USING gist CASCADE;
 DROP OPERATOR CLASS gin_hstore_ops USING gin CASCADE;

@@ -115,10 +115,10 @@ ghstore_compress(PG_FUNCTION_ARGS)
 	if (entry->leafkey)
 	{
 		GISTTYPE   *res = (GISTTYPE *) palloc0(CALCGTSIZE(0));
-		HStore	   *val = (HStore *) DatumGetPointer(PG_DETOAST_DATUM(entry->key));
+		HStore	   *val = DatumGetHStoreP(entry->key);
 		HEntry	   *hsent = ARRPTR(val);
 		char	   *ptr = STRPTR(val);
-		int        count = val->size;
+		int        count = HS_COUNT(val);
 		int        i;
 
 		SET_VARSIZE(res, CALCGTSIZE(0));
@@ -175,7 +175,7 @@ ghstore_decompress(PG_FUNCTION_ARGS)
 	GISTENTRY  *retval;
 	HStore	   *key;
 
-	key = (HStore *) PG_DETOAST_DATUM(entry->key);
+	key = DatumGetHStoreP(entry->key);
 
 	if (key != (HStore *) DatumGetPointer(entry->key))
 	{
@@ -530,7 +530,7 @@ ghstore_consistent(PG_FUNCTION_ARGS)
 		HStore	   *query = PG_GETARG_HS(1);
 		HEntry	   *qe = ARRPTR(query);
 		char	   *qv = STRPTR(query);
-		int        count = query->size;
+		int        count = HS_COUNT(query);
 		int        i;
 
 		for (i = 0; res && i < count; ++i)

@@ -31,7 +31,7 @@ typedef struct
 typedef struct
 {
 	int32		vl_len_;		/* varlena header (do not touch directly!) */
-	int4		size;
+	uint32		size_;
     /* array of HEntry follows */
 } HStore;
 
@@ -40,7 +40,7 @@ typedef struct
 
 /* note multiple evaluations of x */
 #define ARRPTR(x)		( (HEntry*) ( (HStore*)(x) + 1 ) )
-#define STRPTR(x)		( (char*)(ARRPTR(x) + ((HStore*)x)->size * 2) )
+#define STRPTR(x)		( (char*)(ARRPTR(x) + HS_COUNT((HStore*)x) * 2) )
 
 /* note multiple/non evaluations */
 #define HSE_ISFIRST(he_) (((he_).entry & HENTRY_ISFIRST) != 0)
@@ -57,9 +57,19 @@ typedef struct
 #define HS_VALLEN(arr_,i_) (HSE_LEN((arr_)[2*(i_)+1]))
 #define HS_VALISNULL(arr_,i_) (HSE_ISNULL((arr_)[2*(i_)+1]))
 
+/* it's not possible to get more than 2^28 items into an hstore,
+ * so we reserve the top few bits of the size field. See hstore_compat
+ * for one reason why.
+ */
+
+#define HS_FLAG_NEWVERSION 0x80000000
+#define HS_COUNT(hsp_) ((hsp_)->size_ & 0x0FFFFFFF)
+#define HS_SETCOUNT(hsp_,c_) ((hsp_)->size_ = (c_) | HS_FLAG_NEWVERSION)
+
 /* currently, these following macros are the _only_ places that rely
  * on internal knowledge of HEntry. Everything else should be using
- * the above macros.
+ * the above macros. Exception: the in-place upgrade in hstore_compat
+ * messes with entries directly.
  */
 
 /* copy one key/value pair (which must be contiguous starting at
@@ -102,9 +112,9 @@ typedef struct
 		int	buflen = (ptr_) - (buf_);								\
 		if ((count_))												\
 			ARRPTR(hsp_)[0].entry |= HENTRY_ISFIRST;				\
-		if ((count_) != (hsp_)->size)								\
+		if ((count_) != HS_COUNT((hsp_)))							\
 		{															\
-			(hsp_)->size = (count_);								\
+			HS_SETCOUNT((hsp_),(count_));							\
 			memmove(STRPTR(hsp_), (buf_), buflen);					\
 		}															\
 		SET_VARSIZE((hsp_), CALCDATASIZE((count_), buflen));		\
@@ -117,7 +127,29 @@ typedef struct
 		SET_VARSIZE((hsp_), CALCDATASIZE((count_),bl));					\
 	} while (0)
 
-#define PG_GETARG_HS(x) ((HStore*)PG_DETOAST_DATUM(PG_GETARG_DATUM(x)))
+/* support getting old-format hstore values unexpectedly */
+/* hstores less than 32KB can be resolved without ambiguity without
+ * looking beyond HSE_ISFIRST; anything longer than that must have
+ * come through the toaster anyway, so we can punt it to a function
+ * without any detectable performance loss
+ */
+
+HStore *    hstoreUpgrade(HStore *hs, Datum orig);
+
+static inline HStore *
+_hstore_upgrade(Datum d)
+{
+	HStore *hs = (HStore*) PG_DETOAST_DATUM(d);
+	if ((hs->size_ & HS_FLAG_NEWVERSION)
+		|| (hs->size_ == 0)
+		|| (VARSIZE(hs) < 32768 && HSE_ISFIRST((ARRPTR(hs)[0]))))
+		return hs;
+	return hstoreUpgrade(hs,d);
+}
+
+#define DatumGetHStoreP(d_) (_hstore_upgrade(d_))
+
+#define PG_GETARG_HS(x) (DatumGetHStoreP(PG_GETARG_DATUM(x)))
 
 typedef struct
 {
@@ -129,13 +161,13 @@ typedef struct
 	bool		needfree;
 } Pairs;
 
-int			hstoreUniquePairs(Pairs * a, int4 l, int4 *buflen);
+int			hstoreUniquePairs(Pairs *a, int4 l, int4 *buflen);
 HStore *    hstorePairs(Pairs *pairs, int4 pcount, int4 buflen);
 
 size_t		hstoreCheckKeyLen(size_t len);
 size_t		hstoreCheckValLen(size_t len);
 
-int         hstoreFindKey(HStore * hs, int *lowbound, char *key, int keylen);
+int         hstoreFindKey(HStore *hs, int *lowbound, char *key, int keylen);
 Pairs *     hstoreArrayToPairs(ArrayType *a, int* npairs);
 
 #define HStoreContainsStrategyNumber	7

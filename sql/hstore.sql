@@ -192,6 +192,22 @@ select pg_column_size(hstore 'aa=>1, b=>2, c=>3' => ARRAY['c','b'])
 select pg_column_size(hstore 'aa=>1, b=>2, c=>3' => ARRAY['c','b','aa'])
          = pg_column_size('aa=>1, b=>2, c=>3'::hstore);
 
+-- array input
+select '{}'::text[]::hstore;
+select ARRAY['a','g','b','h','asd']::hstore;
+select ARRAY['a','g','b','h','asd','i']::hstore;
+select ARRAY[['a','g'],['b','h'],['asd','i']]::hstore;
+select ARRAY[['a','g','b'],['h','asd','i']]::hstore;
+select ARRAY[[['a','g'],['b','h'],['asd','i']]]::hstore;
+select hstore('{}'::text[]);
+select hstore(ARRAY['a','g','b','h','asd']);
+select hstore(ARRAY['a','g','b','h','asd','i']);
+select hstore(ARRAY[['a','g'],['b','h'],['asd','i']]);
+select hstore(ARRAY[['a','g','b'],['h','asd','i']]);
+select hstore(ARRAY[[['a','g'],['b','h'],['asd','i']]]);
+select hstore('[0:5]={a,g,b,h,asd,i}'::text[]);
+select hstore('[0:2][1:2]={{a,g},{b,h},{asd,i}}'::text[]);
+
 -- records
 select hstore(v) from (values (1, 'foo', 1.2, 3::float8)) v(a,b,c,d);
 create domain hstestdom1 as integer not null default 0;
@@ -243,6 +259,12 @@ select avals('aa=>1 , b=>2, cq=>3'::hstore || 'cq=>l, b=>g, fg=>f');
 select avals('aa=>1 , b=>2, cq=>3'::hstore || 'cq=>l, b=>g, fg=>NULL');
 select avals('""=>1');
 select avals('');
+
+select hstore_to_list('aa=>1, cq=>l, b=>g, fg=>NULL'::hstore);
+select %% 'aa=>1, cq=>l, b=>g, fg=>NULL';
+
+select hstore_to_matrix('aa=>1, cq=>l, b=>g, fg=>NULL'::hstore);
+select %# 'aa=>1, cq=>l, b=>g, fg=>NULL';
 
 select * from skeys('aa=>1 , b=>2, cq=>3'::hstore || 'cq=>l, b=>g, fg=>f');
 select * from skeys('""=>1');

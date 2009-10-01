@@ -38,7 +38,7 @@ gin_extract_hstore(PG_FUNCTION_ARGS)
 	Datum	   *entries = NULL;
 	HEntry     *hsent = ARRPTR(hs);
 	char       *ptr = STRPTR(hs);
-	int        count = hs->size;
+	int        count = HS_COUNT(hs);
 	int        i;
 
 	*nentries = 2 * count;
@@ -204,13 +204,14 @@ gin_consistent_hstore(PG_FUNCTION_ARGS)
 	if (strategy == HStoreContainsStrategyNumber)
 	{
 		HStore	   *query = PG_GETARG_HS(2);
+		int         count = HS_COUNT(query);
 		int			i;
 
 		/*
 		 * Index lost information about correspondence of keys
 		 * and values, so we need recheck
 		 */
-		for (i = 0; res && i < 2 * query->size; i++)
+		for (i = 0; res && i < 2 * count; i++)
 			if (check[i] == false)
 				res = false;
 	}

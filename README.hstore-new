@@ -3,8 +3,8 @@ WARNING WARNING WARNING
 ============================================================================
 
 THIS VERSION OF hstore IS NOT BINARY COMPATIBLE WITH THE ONE SHIPPED
-IN contrib/hstore IN POSTGRESQL 8.3. IF YOU ALREADY HAVE DATA IN YOUR
-DATABASE THAT USES THE hstore TYPE, THEN YOU MUST FOLLOW THE
+IN contrib/hstore IN POSTGRESQL 8.3 and 8.4. IF YOU ALREADY HAVE DATA
+IN YOUR DATABASE THAT USES THE hstore TYPE, THEN YOU MUST FOLLOW THE
 PROCEDURES GIVEN BELOW TO INSTALL THIS VERSION OTHERWISE YOU WILL
 SUFFER CRASHES AND POTENTIALLY LOST DATA.
 
@@ -66,4 +66,87 @@ program for the installed server version is on your PATH):
 Note that this installs the module under the name "hstore-new.so" to
 avoid overwriting any previous hstore.so module. This step is safe to
 perform even if you have existing hstore data.
+
+If the old hstore type is not installed, you can simply install the
+new one in the normal way, e.g.:
+
+   psql -f "$(pg_config --sharedir)/contrib/hstore-new.sql" dbname
+
+or using \i from inside psql. Do _NOT_ attempt to use psql -1, the
+script contains its own BEGIN/COMMIT.
+
+(If the old hstore type is installed, but you have NO stored data that
+uses it (i.e. no table columns of hstore type), then you can deinstall
+the old type before installing the new one; it will be necessary to
+recreate any functions that used hstore as a parameter or result type,
+but otherwise the types are functionally compatible.)
+
+It is safe to use the old and new hstore types in different databases
+in the same cluster.
+
+It is possible (though not recommended, other than for migration as
+detailed below) to install both the old and the new types in the
+_same_ database by placing them in different schemas. Note that this
+can be very confusing!
+
+
+CONVERSION OF EXISTING DATA
+===========================
+
+If you already have the old hstore type installed, and you wish to
+replace it completely with the new type, preserving data, then the
+following procedure is believed to work.
+
+** ALWAYS MAKE BACKUPS BEFORE PROCEEDING FURTHER **
+
+We will assume that the old type was installed in the "public"
+schema and that the new type is also to be installed there.
+(A variation would be to install the new type in its own schema,
+but that complicates the handling of search_path in future.)
+
+We will also assume that this conversion is happening during a
+maintenance window, so we don't have to worry about concurrent
+access. (It _is_ possible to work around this, but if you're
+enough of an expert to handle that, you should be able to work
+out the details yourself.)
+
+This can be done in a single transaction in psql; if you attempt
+this, I strongly recommend \set ON_ERROR_ROLLBACK 'on' so that
+typos don't kill the entire transaction. Copying the commands
+into a script may be preferable, or using the functions described
+below.
+
+First, we need some utility definitions:
+
+  CREATE LANGUAGE plpgsql;  -- in the unlikely event you don't have it already
+  CREATE FUNCTION exec(text) RETURNS void LANGUAGE plpgsql
+    AS $f$ begin execute $1; end; $f$;
+
+Next, we move aside critical functions from the original version:
+
+  BEGIN;   -- if we're doing it as one transaction
+  CREATE SCHEMA hstore_tmp;
+  -- types can't be renamed but can be moved:
+  ALTER TYPE public.hstore SET SCHEMA hstore_tmp;
+  ALTER TYPE public.ghstore SET SCHEMA hstore_tmp;
+  -- operator classes can't be moved between schemas
+  ALTER OPERATOR CLASS gist_hstore_ops USING gist
+    RENAME TO gist_hstore_ops_old;
+  ALTER OPERATOR CLASS gin_hstore_ops USING gin
+    RENAME to gin_hstore_ops_old;
+  -- operators can't be renamed or moved
+  DROP OPERATOR public.=>(text,text);
+  CREATE OPERATOR hstore_tmp.=> ( LEFTARG = text,
+    RIGHTARG = text, PROCEDURE = hstore_tmp.tconvert );
+  -- move conflicting functions
+  ALTER FUNCTION hstore_in(cstring) SET SCHEMA hstore_tmp;
+  ALTER FUNCTION ghstore_in(cstring) SET SCHEMA hstore_tmp;
+  ALTER FUNCTION tconvert(text,text) SET SCHEMA hstore_tmp;
+  SELECT exec('ALTER FUNCTION ' || amproc::regprocedure
+              || ' SET SCHEMA hstore_tmp')
+    FROM pg_amproc
+   WHERE amproclefttype='hstore_tmp.hstore'::regtype
+     AND amproc::regproc::text like '%hstore%';
+  
+  
 
