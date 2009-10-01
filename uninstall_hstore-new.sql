@@ -1,4 +1,4 @@
-/* $PostgreSQL: pgsql/contrib/hstore/uninstall_hstore.sql,v 1.7 2008/04/14 17:05:32 tgl Exp $ */
+/* $PostgreSQL: pgsql/contrib/hstore/uninstall_hstore.sql,v 1.9 2009/09/30 19:50:22 tgl Exp $ */
 
 -- allow caller to set the schema; if hstore_new_schema is already
 -- set, then we'll use it.
@@ -32,12 +32,16 @@ DROP OPERATOR => ( text, text );
 DROP OPERATOR => ( text[], text[] );
 DROP OPERATOR => ( hstore, text[] );
 DROP OPERATOR #= ( anyelement, hstore );
+DROP OPERATOR %% ( NONE, hstore );
+DROP OPERATOR %# ( NONE, hstore );
 DROP OPERATOR =  ( hstore, hstore );
 DROP OPERATOR <> ( hstore, hstore );
 DROP OPERATOR #<#  ( hstore, hstore );
 DROP OPERATOR #<=# ( hstore, hstore );
 DROP OPERATOR #>#  ( hstore, hstore );
 DROP OPERATOR #>=# ( hstore, hstore );
+
+DROP CAST (text[] AS hstore);
 
 DROP FUNCTION hstore_eq(hstore,hstore);
 DROP FUNCTION hstore_ne(hstore,hstore);
@@ -49,8 +53,6 @@ DROP FUNCTION hstore_cmp(hstore,hstore);
 DROP FUNCTION hstore_hash(hstore);
 DROP FUNCTION slice_array(hstore,text[]);
 DROP FUNCTION slice_hstore(hstore,text[]);
-DROP FUNCTION hstore(text[],text[]);
-DROP FUNCTION hstore(record);
 DROP FUNCTION fetchval(hstore,text);
 DROP FUNCTION isexists(hstore,text);
 DROP FUNCTION exist(hstore,text);
@@ -66,6 +68,11 @@ DROP FUNCTION hs_contains(hstore,hstore);
 DROP FUNCTION hs_contained(hstore,hstore);
 DROP FUNCTION tconvert(text,text);
 DROP FUNCTION hstore(text,text);
+DROP FUNCTION hstore(text[],text[]);
+DROP FUNCTION hstore_to_array(hstore);
+DROP FUNCTION hstore_to_matrix(hstore);
+DROP FUNCTION hstore(record);
+DROP FUNCTION hstore(text[]);
 DROP FUNCTION akeys(hstore);
 DROP FUNCTION avals(hstore);
 DROP FUNCTION skeys(hstore);
@@ -79,9 +86,10 @@ DROP FUNCTION ghstore_picksplit(internal, internal);
 DROP FUNCTION ghstore_union(internal, internal);
 DROP FUNCTION ghstore_same(internal, internal, internal);
 DROP FUNCTION ghstore_consistent(internal,internal,int,oid,internal);
-DROP FUNCTION gin_consistent_hstore(internal, int2, internal, internal);
+DROP FUNCTION gin_consistent_hstore(internal, int2, internal, int4, internal, internal);
 DROP FUNCTION gin_extract_hstore(internal, internal);
-DROP FUNCTION gin_extract_hstore_query(internal, internal, smallint);
+DROP FUNCTION gin_extract_hstore_query(internal, internal, smallint, internal, internal);
+DROP FUNCTION hstore_version_diag(hstore);
 
 DROP TYPE hstore CASCADE;
 DROP TYPE ghstore CASCADE;

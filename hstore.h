@@ -1,5 +1,5 @@
 /*
- * $PostgreSQL: pgsql/contrib/hstore/hstore.h,v 1.8 2009/06/11 14:48:51 momjian Exp $
+ * $PostgreSQL: pgsql/contrib/hstore/hstore.h,v 1.9 2009/09/30 19:50:22 tgl Exp $
  */
 #ifndef __HSTORE_H__
 #define __HSTORE_H__
@@ -7,42 +7,24 @@
 #include "fmgr.h"
 #include "utils/array.h"
 
-/* there is one of these for each key _and_ value */
-/* the value points to the _end_ so that we can get the length
- * by subtraction from the previous entry.
- */
 
+/*
+ * HEntry: there is one of these for each key _and_ value in an hstore
+ *
+ * the position offset points to the _end_ so that we can get the length
+ * by subtraction from the previous entry.  the ISFIRST flag lets us tell
+ * whether there is a previous entry.
+ */
 typedef struct
 {
-	uint32  entry;
+	uint32		entry;
 } HEntry;
 
 #define HENTRY_ISFIRST 0x80000000
 #define HENTRY_ISNULL  0x40000000
 #define HENTRY_POSMASK 0x3FFFFFFF
 
-/* determined by the size of "endpos", though this is a bit academic
- * since currently varlenas (and hence both the input and the whole hstore)
- * have the same limit
- */
-#define HSTORE_MAX_KEY_LEN 0x3FFFFFFF
-#define HSTORE_MAX_VALUE_LEN 0x3FFFFFFF
-
-typedef struct
-{
-	int32		vl_len_;		/* varlena header (do not touch directly!) */
-	uint32		size_;
-    /* array of HEntry follows */
-} HStore;
-
-#define HSHRDSIZE	(sizeof(HStore))
-#define CALCDATASIZE(x, lenstr) ( (x) * 2 * sizeof(HEntry) + HSHRDSIZE + (lenstr) )
-
-/* note multiple evaluations of x */
-#define ARRPTR(x)		( (HEntry*) ( (HStore*)(x) + 1 ) )
-#define STRPTR(x)		( (char*)(ARRPTR(x) + HS_COUNT((HStore*)x) * 2) )
-
-/* note multiple/non evaluations */
+/* note possible multiple evaluations, also access to prior array element */
 #define HSE_ISFIRST(he_) (((he_).entry & HENTRY_ISFIRST) != 0)
 #define HSE_ISNULL(he_) (((he_).entry & HENTRY_ISNULL) != 0)
 #define HSE_ENDPOS(he_) ((he_).entry & HENTRY_POSMASK)
@@ -51,28 +33,55 @@ typedef struct
 					  ? HSE_ENDPOS(he_) \
 					  : HSE_ENDPOS(he_) - HSE_ENDPOS((&(he_))[-1]))
 
+/*
+ * determined by the size of "endpos" (ie HENTRY_POSMASK), though this is a
+ * bit academic since currently varlenas (and hence both the input and the
+ * whole hstore) have the same limit
+ */
+#define HSTORE_MAX_KEY_LEN 0x3FFFFFFF
+#define HSTORE_MAX_VALUE_LEN 0x3FFFFFFF
+
+typedef struct
+{
+	int32		vl_len_;		/* varlena header (do not touch directly!) */
+	uint32		size_;			/* flags and number of items in hstore */
+	/* array of HEntry follows */
+} HStore;
+
+/*
+ * it's not possible to get more than 2^28 items into an hstore,
+ * so we reserve the top few bits of the size field. See hstore_compat.c
+ * for one reason why.  Some bits are left for future use here.
+ */
+#define HS_FLAG_NEWVERSION 0x80000000
+
+#define HS_COUNT(hsp_) ((hsp_)->size_ & 0x0FFFFFFF)
+#define HS_SETCOUNT(hsp_,c_) ((hsp_)->size_ = (c_) | HS_FLAG_NEWVERSION)
+
+
+#define HSHRDSIZE	(sizeof(HStore))
+#define CALCDATASIZE(x, lenstr) ( (x) * 2 * sizeof(HEntry) + HSHRDSIZE + (lenstr) )
+
+/* note multiple evaluations of x */
+#define ARRPTR(x)		( (HEntry*) ( (HStore*)(x) + 1 ) )
+#define STRPTR(x)		( (char*)(ARRPTR(x) + HS_COUNT((HStore*)(x)) * 2) )
+
+/* note multiple/non evaluations */
 #define HS_KEY(arr_,str_,i_) ((str_) + HSE_OFF((arr_)[2*(i_)]))
 #define HS_VAL(arr_,str_,i_) ((str_) + HSE_OFF((arr_)[2*(i_)+1]))
 #define HS_KEYLEN(arr_,i_) (HSE_LEN((arr_)[2*(i_)]))
 #define HS_VALLEN(arr_,i_) (HSE_LEN((arr_)[2*(i_)+1]))
 #define HS_VALISNULL(arr_,i_) (HSE_ISNULL((arr_)[2*(i_)+1]))
 
-/* it's not possible to get more than 2^28 items into an hstore,
- * so we reserve the top few bits of the size field. See hstore_compat
- * for one reason why.
- */
-
-#define HS_FLAG_NEWVERSION 0x80000000
-#define HS_COUNT(hsp_) ((hsp_)->size_ & 0x0FFFFFFF)
-#define HS_SETCOUNT(hsp_,c_) ((hsp_)->size_ = (c_) | HS_FLAG_NEWVERSION)
-
-/* currently, these following macros are the _only_ places that rely
+/*
+ * currently, these following macros are the _only_ places that rely
  * on internal knowledge of HEntry. Everything else should be using
- * the above macros. Exception: the in-place upgrade in hstore_compat
+ * the above macros. Exception: the in-place upgrade in hstore_compat.c
  * messes with entries directly.
  */
 
-/* copy one key/value pair (which must be contiguous starting at
+/*
+ * copy one key/value pair (which must be contiguous starting at
  * sptr_) into an under-construction hstore; dent_ is an HEntry*,
  * dbuf_ is the destination's string buffer, dptr_ is the current
  * position in the destination. lots of modification and multiple
@@ -87,7 +96,8 @@ typedef struct
 							 | ((vnull_) ? HENTRY_ISNULL : 0));			\
 	} while(0)
 
-/* add one key/item pair, from a Pairs structure, into an
+/*
+ * add one key/item pair, from a Pairs structure, into an
  * under-construction hstore
  */
 #define HS_ADDITEM(dent_,dbuf_,dptr_,pair_)								\
@@ -127,56 +137,46 @@ typedef struct
 		SET_VARSIZE((hsp_), CALCDATASIZE((count_),bl));					\
 	} while (0)
 
-/* support getting old-format hstore values unexpectedly */
-/* hstores less than 32KB can be resolved without ambiguity without
- * looking beyond HSE_ISFIRST; anything longer than that must have
- * come through the toaster anyway, so we can punt it to a function
- * without any detectable performance loss
+/* DatumGetHStoreP includes support for reading old-format hstore values */
+extern HStore *hstoreUpgrade(Datum orig);
+
+#define DatumGetHStoreP(d) hstoreUpgrade(d)
+
+#define PG_GETARG_HS(x) DatumGetHStoreP(PG_GETARG_DATUM(x))
+
+
+/*
+ * Pairs is a "decompressed" representation of one key/value pair.
+ * The two strings are not necessarily null-terminated.
  */
-
-HStore *    hstoreUpgrade(HStore *hs, Datum orig);
-
-static inline HStore *
-_hstore_upgrade(Datum d)
-{
-	HStore *hs = (HStore*) PG_DETOAST_DATUM(d);
-	if ((hs->size_ & HS_FLAG_NEWVERSION)
-		|| (hs->size_ == 0)
-		|| (VARSIZE(hs) < 32768 && HSE_ISFIRST((ARRPTR(hs)[0]))))
-		return hs;
-	return hstoreUpgrade(hs,d);
-}
-
-#define DatumGetHStoreP(d_) (_hstore_upgrade(d_))
-
-#define PG_GETARG_HS(x) (DatumGetHStoreP(PG_GETARG_DATUM(x)))
-
 typedef struct
 {
 	char	   *key;
 	char	   *val;
 	size_t		keylen;
 	size_t		vallen;
-	bool		isnull;
-	bool		needfree;
+	bool		isnull;			/* value is null? */
+	bool		needfree;		/* need to pfree the value? */
 } Pairs;
 
-int			hstoreUniquePairs(Pairs *a, int4 l, int4 *buflen);
-HStore *    hstorePairs(Pairs *pairs, int4 pcount, int4 buflen);
+extern int	hstoreUniquePairs(Pairs *a, int4 l, int4 *buflen);
+extern HStore *hstorePairs(Pairs *pairs, int4 pcount, int4 buflen);
 
-size_t		hstoreCheckKeyLen(size_t len);
-size_t		hstoreCheckValLen(size_t len);
+extern size_t hstoreCheckKeyLen(size_t len);
+extern size_t hstoreCheckValLen(size_t len);
 
-int         hstoreFindKey(HStore *hs, int *lowbound, char *key, int keylen);
-Pairs *     hstoreArrayToPairs(ArrayType *a, int* npairs);
+extern int	hstoreFindKey(HStore *hs, int *lowbound, char *key, int keylen);
+extern Pairs *hstoreArrayToPairs(ArrayType *a, int *npairs);
 
 #define HStoreContainsStrategyNumber	7
 #define HStoreExistsStrategyNumber		9
 #define HStoreExistsAnyStrategyNumber	10
 #define HStoreExistsAllStrategyNumber	11
+#define HStoreOldContainsStrategyNumber	13		/* backwards compatibility */
 
-/* defining HSTORE_POLLUTE_NAMESPACE=0 will prevent this; for now, we default
- * to on for the benefit of people restoring old dumps
+/*
+ * defining HSTORE_POLLUTE_NAMESPACE=0 will prevent use of old function names;
+ * for now, we default to on for the benefit of people restoring old dumps
  */
 #ifndef HSTORE_POLLUTE_NAMESPACE
 #define HSTORE_POLLUTE_NAMESPACE 1
@@ -187,9 +187,11 @@ Pairs *     hstoreArrayToPairs(ArrayType *a, int* npairs);
 	PG_FUNCTION_INFO_V1(oldname_);		  \
 	Datum oldname_(PG_FUNCTION_ARGS);	  \
 	Datum newname_(PG_FUNCTION_ARGS);	  \
-	Datum oldname_(PG_FUNCTION_ARGS) { return newname_(fcinfo); }
+	Datum oldname_(PG_FUNCTION_ARGS) { return newname_(fcinfo); } \
+	extern int no_such_variable
 #else
-#define HSTORE_POLLUTE(newname_,oldname_)
+#define HSTORE_POLLUTE(newname_,oldname_) \
+	extern int no_such_variable
 #endif
 
 #endif   /* __HSTORE_H__ */

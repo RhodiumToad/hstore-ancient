@@ -1,14 +1,14 @@
 /*
- * $PostgreSQL: pgsql/contrib/hstore/hstore_gist.c,v 1.10 2009/06/11 14:48:51 momjian Exp $
+ * $PostgreSQL: pgsql/contrib/hstore/hstore_gist.c,v 1.11 2009/09/30 19:50:22 tgl Exp $
  */
 #include "postgres.h"
 
-#include "catalog/pg_type.h"
 #include "access/gist.h"
 #include "access/itup.h"
 #include "access/skey.h"
-#include "crc32.h"
+#include "catalog/pg_type.h"
 
+#include "crc32.h"
 #include "hstore.h"
 
 /* bigint defines */
@@ -511,6 +511,7 @@ ghstore_consistent(PG_FUNCTION_ARGS)
 {
 	GISTTYPE   *entry = (GISTTYPE *) DatumGetPointer(((GISTENTRY *) PG_GETARG_POINTER(0))->key);
 	StrategyNumber strategy = (StrategyNumber) PG_GETARG_UINT16(2);
+	/* Oid		subtype = PG_GETARG_OID(3); */
 	bool		res = true;
 	BITVECP		sign;
 
@@ -525,7 +526,8 @@ ghstore_consistent(PG_FUNCTION_ARGS)
 
 	sign = GETSIGN(entry);
 
-	if (strategy == HStoreContainsStrategyNumber || strategy == 13 /* hack for old strats */ )
+	if (strategy == HStoreContainsStrategyNumber ||
+		strategy == HStoreOldContainsStrategyNumber)
 	{
 		HStore	   *query = PG_GETARG_HS(1);
 		HEntry	   *qe = ARRPTR(query);

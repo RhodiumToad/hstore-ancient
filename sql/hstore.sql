@@ -260,7 +260,7 @@ select avals('aa=>1 , b=>2, cq=>3'::hstore || 'cq=>l, b=>g, fg=>NULL');
 select avals('""=>1');
 select avals('');
 
-select hstore_to_list('aa=>1, cq=>l, b=>g, fg=>NULL'::hstore);
+select hstore_to_array('aa=>1, cq=>l, b=>g, fg=>NULL'::hstore);
 select %% 'aa=>1, cq=>l, b=>g, fg=>NULL';
 
 select hstore_to_matrix('aa=>1, cq=>l, b=>g, fg=>NULL'::hstore);
@@ -318,13 +318,6 @@ select count(*) from testhstore where h ?& ARRAY['public','disabled'];
 
 select count(*) from (select (each(h)).key from testhstore) as wow ;
 select key, count(*) from (select (each(h)).key from testhstore) as wow group by key order by count desc, key;
-
--- btree opclass transitivity
-set enable_seqscan=on;
-create table testhstore2 as select * from testhstore limit 50;
-create function bool_imp(boolean,boolean) returns boolean language sql as $f$ select (not $1) or $2; $f$;
-create operator => (leftarg = boolean, rightarg = boolean, procedure = bool_imp);
-select every( ((h1.h #># h2.h AND h2.h #># h3.h) => (h1.h #># h3.h)) AND ((h1.h #>=# h2.h AND h2.h #>=# h3.h) => (h1.h #>=# h3.h)) AND ((h1.h #<# h2.h AND h2.h #<# h3.h) => (h1.h #<# h3.h)) AND ((h1.h #<=# h2.h AND h2.h #<=# h3.h) => (h1.h #<=# h3.h)) AND ((h1.h = h2.h AND h2.h = h3.h) => (h1.h = h3.h)) ) from testhstore2 h1, testhstore2 h2, testhstore2 h3;
 
 -- sort/hash
 select count(distinct h) from testhstore;

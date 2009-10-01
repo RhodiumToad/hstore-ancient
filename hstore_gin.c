@@ -1,5 +1,5 @@
 /*
- * $PostgreSQL: pgsql/contrib/hstore/hstore_gin.c,v 1.6 2009/06/11 14:48:51 momjian Exp $
+ * $PostgreSQL: pgsql/contrib/hstore/hstore_gin.c,v 1.7 2009/09/30 19:50:22 tgl Exp $
  */
 #include "postgres.h"
 
@@ -100,8 +100,8 @@ gin_extract_hstore_query(PG_FUNCTION_ARGS)
 
 		PG_RETURN_POINTER(entries);
 	}
-	else if (strategy == HStoreExistsAnyStrategyNumber
-			 || strategy == HStoreExistsAllStrategyNumber)
+	else if (strategy == HStoreExistsAnyStrategyNumber ||
+			 strategy == HStoreExistsAllStrategyNumber)
 	{
 		ArrayType   *query = PG_GETARG_ARRAYTYPE_P(0);
 		Datum      *key_datums;
@@ -147,9 +147,11 @@ gin_consistent_hstore(PG_FUNCTION_ARGS)
 {
 	bool	   *check = (bool *) PG_GETARG_POINTER(0);
 	StrategyNumber strategy = PG_GETARG_UINT16(1);
-	bool		res = true;
+	/* HStore	   *query = PG_GETARG_HS(2); */
 	int32		nkeys = PG_GETARG_INT32(3);
+	/* Pointer	   *extra_data = (Pointer *) PG_GETARG_POINTER(4); */
 	bool	   *recheck = (bool *) PG_GETARG_POINTER(5);
+	bool		res = true;
 
 	*recheck = false;
 
@@ -183,8 +185,6 @@ gin_consistent_hstore(PG_FUNCTION_ARGS)
 		for (i = 0; res && i < nkeys; ++i)
 			if (!check[i])
 				res = false;
-
-		/* Existence of key is guaranteed */
 	}
 	else
 		elog(ERROR, "Unsupported strategy number: %d", strategy);
@@ -251,8 +251,6 @@ gin_consistent_hstore(PG_FUNCTION_ARGS)
 			if (!check[j++])
 				res = false;
 		}
-
-		/* Existence of key is guaranteed */
 	}
 	else
 		elog(ERROR, "Unsupported strategy number: %d", strategy);

@@ -1,31 +1,30 @@
 /*
- * $PostgreSQL$
+ * $PostgreSQL: pgsql/contrib/hstore/hstore_op.c,v 1.15 2009/09/30 21:26:17 tgl Exp $
  */
 #include "postgres.h"
 
+#include "access/hash.h"
+#include "access/heapam.h"
+#include "access/htup.h"
 #include "catalog/pg_type.h"
 #include "funcapi.h"
 #include "utils/builtins.h"
-#include "access/hash.h"
-#include "access/htup.h"
-#include "access/heapam.h"
 
 #include "hstore.h"
 
-#if HSTORE_POLLUTE_NAMESPACE
-HSTORE_POLLUTE(hstore_fetchval,fetchval)
-HSTORE_POLLUTE(hstore_exists,exists)
-HSTORE_POLLUTE(hstore_defined,defined)
-HSTORE_POLLUTE(hstore_delete,delete)
-HSTORE_POLLUTE(hstore_concat,hs_concat)
-HSTORE_POLLUTE(hstore_contains,hs_contains)
-HSTORE_POLLUTE(hstore_contained,hs_contained)
-HSTORE_POLLUTE(hstore_akeys,akeys)
-HSTORE_POLLUTE(hstore_avals,avals)
-HSTORE_POLLUTE(hstore_skeys,skeys)
-HSTORE_POLLUTE(hstore_svals,svals)
-HSTORE_POLLUTE(hstore_each,each)
-#endif
+/* old names for C functions */
+HSTORE_POLLUTE(hstore_fetchval,fetchval);
+HSTORE_POLLUTE(hstore_exists,exists);
+HSTORE_POLLUTE(hstore_defined,defined);
+HSTORE_POLLUTE(hstore_delete,delete);
+HSTORE_POLLUTE(hstore_concat,hs_concat);
+HSTORE_POLLUTE(hstore_contains,hs_contains);
+HSTORE_POLLUTE(hstore_contained,hs_contained);
+HSTORE_POLLUTE(hstore_akeys,akeys);
+HSTORE_POLLUTE(hstore_avals,avals);
+HSTORE_POLLUTE(hstore_skeys,skeys);
+HSTORE_POLLUTE(hstore_svals,svals);
+HSTORE_POLLUTE(hstore_each,each);
 
 #if PG_VERSION_NUM < 80400
 /*
@@ -46,12 +45,12 @@ cstring_to_text_with_len(const char *s, int len)
 }
 #endif
 
-/* we're often finding a sequence of keys in ascending order. The
+/*
+ * We're often finding a sequence of keys in ascending order. The
  * "lowbound" parameter is used to cache lower bounds of searches
  * between calls, based on this assumption. Pass NULL for it for
  * one-off or unordered searches.
  */
-
 int
 hstoreFindKey(HStore * hs, int *lowbound, char *key, int keylen)
 {
@@ -90,7 +89,7 @@ hstoreFindKey(HStore * hs, int *lowbound, char *key, int keylen)
 }
 
 Pairs *
-hstoreArrayToPairs(ArrayType *a, int* npairs)
+hstoreArrayToPairs(ArrayType *a, int *npairs)
 {
 	Datum      *key_datums;
 	bool       *key_nulls;
@@ -111,7 +110,7 @@ hstoreArrayToPairs(ArrayType *a, int* npairs)
 
 	key_pairs = palloc(sizeof(Pairs) * key_count);
 
-	for (i = 0, j = 0; i < key_count; ++i)
+	for (i = 0, j = 0; i < key_count; i++)
 	{
 		if (!key_nulls[i])
 		{
@@ -121,7 +120,7 @@ hstoreArrayToPairs(ArrayType *a, int* npairs)
 			key_pairs[j].vallen = 0;
 			key_pairs[j].needfree = 0;
 			key_pairs[j].isnull = 1;
-			++j;
+			j++;
 		}
 	}
 
@@ -180,7 +179,8 @@ hstore_exists_any(PG_FUNCTION_ARGS)
 	int         lowbound = 0;
 	bool        res = false;
 
-	/* we exploit the fact that the pairs list is already sorted into
+	/*
+	 * we exploit the fact that the pairs list is already sorted into
 	 * strictly increasing order to narrow the hstoreFindKey search;
 	 * each search can start one entry past the previous "found"
 	 * entry, or at the lower bound of the last search.
@@ -212,7 +212,8 @@ hstore_exists_all(PG_FUNCTION_ARGS)
 	int         lowbound = 0;
 	bool        res = nkeys ? true : false;
 
-	/* we exploit the fact that the pairs list is already sorted into
+	/*
+	 * we exploit the fact that the pairs list is already sorted into
 	 * strictly increasing order to narrow the hstoreFindKey search;
 	 * each search can start one entry past the previous "found"
 	 * entry, or at the lower bound of the last search.
@@ -329,7 +330,8 @@ hstore_delete_array(PG_FUNCTION_ARGS)
 		PG_RETURN_POINTER(out);
 	}
 
-	/* this is in effect a merge between hs and key_pairs, both of
+	/*
+	 * this is in effect a merge between hs and key_pairs, both of
 	 * which are already sorted by (keylen,key); we take keys from
 	 * hs only
 	 */
@@ -410,7 +412,8 @@ hstore_delete_hstore(PG_FUNCTION_ARGS)
 		PG_RETURN_POINTER(out);
 	}
 
-	/* this is in effect a merge between hs and hs2, both of
+	/*
+	 * this is in effect a merge between hs and hs2, both of
 	 * which are already sorted by (keylen,key); we take keys from
 	 * hs only; for equal keys, we take the value from hs unless the
 	 * values are equal
@@ -517,7 +520,8 @@ hstore_concat(PG_FUNCTION_ARGS)
 	es2 = ARRPTR(s2);
 	ed = ARRPTR(out);
 
-	/* this is in effect a merge between s1 and s2, both of which
+	/*
+	 * this is in effect a merge between s1 and s2, both of which
 	 * are already sorted by (keylen,key); we take s2 for equal keys
 	 */
 
@@ -656,7 +660,8 @@ hstore_slice_to_hstore(PG_FUNCTION_ARGS)
 	out_pairs = palloc(sizeof(Pairs) * nkeys);
 	bufsiz = 0;
 
-	/* we exploit the fact that the pairs list is already sorted into
+	/*
+	 * we exploit the fact that the pairs list is already sorted into
 	 * strictly increasing order to narrow the hstoreFindKey search;
 	 * each search can start one entry past the previous "found"
 	 * entry, or at the lower bound of the last search.
@@ -679,7 +684,8 @@ hstore_slice_to_hstore(PG_FUNCTION_ARGS)
 		}
 	}
 
-	/* we don't use uniquePairs here because we know that the
+	/*
+	 * we don't use uniquePairs here because we know that the
 	 * pairs list is already sorted and uniq'ed.
 	 */
 
@@ -772,7 +778,7 @@ hstore_avals(PG_FUNCTION_ARGS)
 
 
 static ArrayType *
-hstore_to_array(HStore *hs, int ndims)
+hstore_to_array_internal(HStore *hs, int ndims)
 {
 	HEntry	   *entries = ARRPTR(hs);
 	char	   *base = STRPTR(hs);
@@ -818,13 +824,13 @@ hstore_to_array(HStore *hs, int ndims)
 							  TEXTOID, -1, false, 'i');
 }
 
-PG_FUNCTION_INFO_V1(hstore_to_list);
-Datum		hstore_to_list(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(hstore_to_array);
+Datum		hstore_to_array(PG_FUNCTION_ARGS);
 Datum
-hstore_to_list(PG_FUNCTION_ARGS)
+hstore_to_array(PG_FUNCTION_ARGS)
 {
 	HStore     *hs = PG_GETARG_HS(0);
-	ArrayType  *out = hstore_to_array(hs, 1);
+	ArrayType  *out = hstore_to_array_internal(hs, 1);
 
 	PG_RETURN_POINTER(out);
 }
@@ -835,12 +841,13 @@ Datum
 hstore_to_matrix(PG_FUNCTION_ARGS)
 {
 	HStore     *hs = PG_GETARG_HS(0);
-	ArrayType  *out = hstore_to_array(hs, 2);
+	ArrayType  *out = hstore_to_array_internal(hs, 2);
 
 	PG_RETURN_POINTER(out);
 }
 
-/* Common initialization function for the various set-returning
+/*
+ * Common initialization function for the various set-returning
  * funcs. fcinfo is only passed if the function is to return a
  * composite; it will be used to look up the return tupledesc.
  * we stash a copy of the hstore in the multi-call context in
@@ -977,7 +984,8 @@ hstore_contains(PG_FUNCTION_ARGS)
 	int         lastidx = 0;
 	int         i;
 
-	/* we exploit the fact that keys in "tmpl" are in strictly
+	/*
+	 * we exploit the fact that keys in "tmpl" are in strictly
 	 * increasing order to narrow the hstoreFindKey search; each search
 	 * can start one entry past the previous "found" entry, or at the
 	 * lower bound of the search
@@ -1075,9 +1083,10 @@ hstore_each(PG_FUNCTION_ARGS)
 }
 
 
-/* btree sort order for hstores isn't intended to be useful;
- * we compare the entire string buffer first, then the entry
- * pos array.
+/*
+ * btree sort order for hstores isn't intended to be useful; we really only
+ * care about equality versus non-equality.  we compare the entire string
+ * buffer first, then the entry pos array.
  */
 
 PG_FUNCTION_INFO_V1(hstore_cmp);
@@ -1089,18 +1098,14 @@ hstore_cmp(PG_FUNCTION_ARGS)
 	HStore	   *hs2 = PG_GETARG_HS(1);
 	int         hcount1 = HS_COUNT(hs1);
 	int         hcount2 = HS_COUNT(hs2);
-	char       *str1 = STRPTR(hs1);
-	char       *str2 = STRPTR(hs2);
-	HEntry     *ent1 = ARRPTR(hs1);
-	HEntry     *ent2 = ARRPTR(hs2);
 	int         res = 0;
 
 	if (hcount1 == 0 || hcount2 == 0)
 	{
-		/* if either operand is empty, and the other is nonempty, the
+		/*
+		 * if either operand is empty, and the other is nonempty, the
 		 * nonempty one is larger. If both are empty they are equal.
 		 */
-
 		if (hcount1 > 0)
 			res = 1;
 		else if (hcount2 > 0)
@@ -1109,6 +1114,10 @@ hstore_cmp(PG_FUNCTION_ARGS)
 	else
 	{
 		/* here we know both operands are nonempty */
+		char       *str1 = STRPTR(hs1);
+		char       *str2 = STRPTR(hs2);
+		HEntry     *ent1 = ARRPTR(hs1);
+		HEntry     *ent2 = ARRPTR(hs2);
 		size_t      len1 = HSE_ENDPOS(ent1[2*hcount1 - 1]);
 		size_t      len2 = HSE_ENDPOS(ent2[2*hcount2 - 1]);
 
@@ -1128,9 +1137,10 @@ hstore_cmp(PG_FUNCTION_ARGS)
 			{
 				int count = hcount1 * 2;
 				int i;
+
 				for (i = 0; i < count; ++i)
-					if (HSE_ENDPOS(ent1[i]) != HSE_ENDPOS(ent2[i])
-						|| HSE_ISNULL(ent1[i]) != HSE_ISNULL(ent2[i]))
+					if (HSE_ENDPOS(ent1[i]) != HSE_ENDPOS(ent2[i]) ||
+						HSE_ISNULL(ent1[i]) != HSE_ISNULL(ent2[i]))
 						break;
 				if (i < count)
 				{
@@ -1151,7 +1161,8 @@ hstore_cmp(PG_FUNCTION_ARGS)
 		}
 	}
 
-	/* this is a btree support function; this is one of the few
+	/*
+	 * this is a btree support function; this is one of the few
 	 * places where memory needs to be explicitly freed.
 	 */
 	PG_FREE_IF_COPY(hs1,0);
@@ -1236,13 +1247,17 @@ hstore_hash(PG_FUNCTION_ARGS)
 	Datum       hval = hash_any((unsigned char *)VARDATA(hs),
 								VARSIZE(hs) - VARHDRSZ);
 
-	/* this is the only place in the code that cares whether the
+	/*
+	 * this is the only place in the code that cares whether the
 	 * overall varlena size exactly matches the true data size;
 	 * this assertion should be maintained by all the other code,
 	 * but we make it explicit here.
 	 */
-	Assert(VARSIZE(hs)
-		   == CALCDATASIZE(HS_COUNT(hs), HSE_ENDPOS(ARRPTR(hs)[2*HS_COUNT(hs) - 1])));
+	Assert(VARSIZE(hs) ==
+		   (HS_COUNT(hs) != 0 ?
+			CALCDATASIZE(HS_COUNT(hs),
+						 HSE_ENDPOS(ARRPTR(hs)[2*HS_COUNT(hs) - 1])) :
+			HSHRDSIZE));
 
 	PG_FREE_IF_COPY(hs,0);
 	PG_RETURN_DATUM(hval);

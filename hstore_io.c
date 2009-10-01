@@ -1,24 +1,24 @@
 /*
- * $PostgreSQL: pgsql/contrib/hstore/hstore_io.c,v 1.11 2009/06/11 14:48:51 momjian Exp $
+ * $PostgreSQL: pgsql/contrib/hstore/hstore_io.c,v 1.12 2009/09/30 19:50:22 tgl Exp $
  */
 #include "postgres.h"
-#include "catalog/pg_type.h"
-#include "utils/lsyscache.h"
-#include "utils/typcache.h"
-#include "access/htup.h"
-#include "access/heapam.h"
-#include "libpq/pqformat.h"
-#include "funcapi.h"
 
 #include <ctype.h>
+
+#include "access/heapam.h"
+#include "access/htup.h"
+#include "catalog/pg_type.h"
+#include "funcapi.h"
+#include "libpq/pqformat.h"
+#include "utils/lsyscache.h"
+#include "utils/typcache.h"
 
 #include "hstore.h"
 
 PG_MODULE_MAGIC;
 
-#if HSTORE_POLLUTE_NAMESPACE
-HSTORE_POLLUTE(hstore_from_text,tconvert)
-#endif
+/* old names for C functions */
+HSTORE_POLLUTE(hstore_from_text,tconvert);
 
 
 typedef struct
@@ -298,12 +298,12 @@ comparePairs(const void *a, const void *b)
 	return (((Pairs *) a)->keylen > ((Pairs *) b)->keylen) ? 1 : -1;
 }
 
-/* this code still respects pairs.needfree, even though in general
+/*
+ * this code still respects pairs.needfree, even though in general
  * it should never be called in a context where anything needs freeing.
  * we keep it because (a) those calls are in a rare code path anyway,
  * and (b) who knows whether they might be needed by some caller.
  */
-
 int
 hstoreUniquePairs(Pairs *a, int4 l, int4 *buflen)
 {
@@ -323,8 +323,8 @@ hstoreUniquePairs(Pairs *a, int4 l, int4 *buflen)
 	res = a;
 	while (ptr - a < l)
 	{
-		if (ptr->keylen == res->keylen
-			&& strncmp(ptr->key, res->key, res->keylen) == 0)
+		if (ptr->keylen == res->keylen &&
+			strncmp(ptr->key, res->key, res->keylen) == 0)
 		{
 			if (ptr->needfree)
 			{
@@ -345,26 +345,6 @@ hstoreUniquePairs(Pairs *a, int4 l, int4 *buflen)
 	*buflen += res->keylen + ((res->isnull) ? 0 : res->vallen);
 	return res + 1 - a;
 }
-
-#if 0   /* this superfluous code was >15% of hstore_in's runtime. */
-static void
-freeHSParse(HSParser *state)
-{
-	int			i;
-
-	if (state->word)
-		pfree(state->word);
-	for (i = 0; i < state->pcur; i++)
-		if (state->pairs[i].needfree)
-		{
-			if (state->pairs[i].key)
-				pfree(state->pairs[i].key);
-			if (state->pairs[i].val)
-				pfree(state->pairs[i].val);
-		}
-	pfree(state->pairs);
-}
-#endif
 
 size_t
 hstoreCheckKeyLen(size_t len)
@@ -433,10 +413,6 @@ hstore_in(PG_FUNCTION_ARGS)
 	state.pcur = hstoreUniquePairs(state.pairs, state.pcur, &buflen);
 
 	out = hstorePairs(state.pairs, state.pcur, buflen);
-
-#if 0  /* see comment above */
-	freeHSParse(&state);
-#endif
 
 	PG_RETURN_POINTER(out);
 }
@@ -563,7 +539,8 @@ hstore_from_arrays(PG_FUNCTION_ARGS)
 
 	Assert(ARR_ELEMTYPE(key_array) == TEXTOID);
 
-	/* must check >1 rather than != 1 because empty arrays have
+	/*
+	 * must check >1 rather than != 1 because empty arrays have
 	 * 0 dimensions, not 1
 	 */
 
@@ -596,13 +573,13 @@ hstore_from_arrays(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
 					 errmsg("wrong number of array subscripts")));
 
-		if ((ARR_NDIM(key_array) > 0 || ARR_NDIM(value_array) > 0)
-			&& (ARR_NDIM(key_array) != ARR_NDIM(value_array)
-				|| ARR_DIMS(key_array)[0] != ARR_DIMS(value_array)[0]
-				|| ARR_LBOUND(key_array)[0] != ARR_LBOUND(value_array)[0]))
+		if ((ARR_NDIM(key_array) > 0 || ARR_NDIM(value_array) > 0) &&
+			(ARR_NDIM(key_array) != ARR_NDIM(value_array) ||
+			 ARR_DIMS(key_array)[0] != ARR_DIMS(value_array)[0] ||
+			 ARR_LBOUND(key_array)[0] != ARR_LBOUND(value_array)[0]))
 			ereport(ERROR,
 					(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
-					 errmsg("cannot construct hstore from arrays of differing bounds")));
+					 errmsg("arrays must have same bounds")));
 
 		deconstruct_array(value_array,
 						  TEXTOID, -1, false, 'i',
@@ -676,14 +653,14 @@ hstore_from_array(PG_FUNCTION_ARGS)
 			if ((ARR_DIMS(in_array)[0]) % 2)
 				ereport(ERROR,
 						(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
-						 errmsg("cannot construct hstore from array of odd size")));
+						 errmsg("array must have even number of elements")));
 			break;
 
 		case 2:
 			if ((ARR_DIMS(in_array)[1]) != 2)
 				ereport(ERROR,
 						(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
-						 errmsg("cannot construct hstore from 2-d array of this size")));
+						 errmsg("array must have two columns")));
 			break;
 
 		default:
@@ -778,7 +755,8 @@ hstore_from_record(PG_FUNCTION_ARGS)
 	{
 		Oid     argtype = get_fn_expr_argtype(fcinfo->flinfo,0);
 
-		/* have no tuple to look at, so the only source of type info
+		/*
+		 * have no tuple to look at, so the only source of type info
 		 * is the argtype. The lookup_rowtype_tupdesc call below will
 		 * error out if we don't have a known composite type oid here.
 		 */
@@ -930,7 +908,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	if (!type_is_rowtype(argtype))
 		ereport(ERROR,
 				(errcode(ERRCODE_DATATYPE_MISMATCH),
-				 errmsg("argument must be a rowtype")));
+				 errmsg("first argument must be a rowtype")));
 
 	if (PG_ARGISNULL(0))
 	{
@@ -939,7 +917,8 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 
 		rec = NULL;
 
-		/* have no tuple to look at, so the only source of type info
+		/*
+		 * have no tuple to look at, so the only source of type info
 		 * is the argtype. The lookup_rowtype_tupdesc call below will
 		 * error out if we don't have a known composite type oid here.
 		 */
@@ -1141,7 +1120,8 @@ hstore_out(PG_FUNCTION_ARGS)
 
 	buflen = 0;
 
-	/* this loop overestimates due to pessimistic assumptions about
+	/*
+	 * this loop overestimates due to pessimistic assumptions about
 	 * escaping, so very large hstore values can't be output. this
 	 * could be fixed, but many other data types probably have the
 	 * same issue. This replaced code that used the original varlena

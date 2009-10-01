@@ -825,9 +825,9 @@ select quote_literal('{}'::text[] => null);
 (1 row)
 
 select ARRAY['a'] => '{}'::text[];  -- error
-ERROR:  cannot construct hstore from arrays of differing bounds
+ERROR:  arrays must have same bounds
 select '{}'::text[] => ARRAY['a'];  -- error
-ERROR:  cannot construct hstore from arrays of differing bounds
+ERROR:  arrays must have same bounds
 select pg_column_size(ARRAY['a','b','asd'] => ARRAY['g','h','i'])
          = pg_column_size('a=>g, b=>h, asd=>i'::hstore);
  ?column? 
@@ -857,7 +857,7 @@ select '{}'::text[]::hstore;
 (1 row)
 
 select ARRAY['a','g','b','h','asd']::hstore;
-ERROR:  cannot construct hstore from array of odd size
+ERROR:  array must have even number of elements
 select ARRAY['a','g','b','h','asd','i']::hstore;
              array              
 --------------------------------
@@ -871,7 +871,7 @@ select ARRAY[['a','g'],['b','h'],['asd','i']]::hstore;
 (1 row)
 
 select ARRAY[['a','g','b'],['h','asd','i']]::hstore;
-ERROR:  cannot construct hstore from 2-d array of this size
+ERROR:  array must have two columns
 select ARRAY[[['a','g'],['b','h'],['asd','i']]]::hstore;
 ERROR:  wrong number of array subscripts
 select hstore('{}'::text[]);
@@ -881,7 +881,7 @@ select hstore('{}'::text[]);
 (1 row)
 
 select hstore(ARRAY['a','g','b','h','asd']);
-ERROR:  cannot construct hstore from array of odd size
+ERROR:  array must have even number of elements
 select hstore(ARRAY['a','g','b','h','asd','i']);
              hstore             
 --------------------------------
@@ -895,7 +895,7 @@ select hstore(ARRAY[['a','g'],['b','h'],['asd','i']]);
 (1 row)
 
 select hstore(ARRAY[['a','g','b'],['h','asd','i']]);
-ERROR:  cannot construct hstore from 2-d array of this size
+ERROR:  array must have two columns
 select hstore(ARRAY[[['a','g'],['b','h'],['asd','i']]]);
 ERROR:  wrong number of array subscripts
 select hstore('[0:5]={a,g,b,h,asd,i}'::text[]);
@@ -1141,8 +1141,8 @@ select avals('');
  {}
 (1 row)
 
-select hstore_to_list('aa=>1, cq=>l, b=>g, fg=>NULL'::hstore);
-     hstore_to_list      
+select hstore_to_array('aa=>1, cq=>l, b=>g, fg=>NULL'::hstore);
+     hstore_to_array     
 -------------------------
  {b,g,aa,1,cq,l,fg,NULL}
 (1 row)
@@ -1412,17 +1412,6 @@ select key, count(*) from (select (each(h)).key from testhstore) as wow group by
  auth      |   168
  abstract  |   161
 (22 rows)
-
--- btree opclass transitivity
-set enable_seqscan=on;
-create table testhstore2 as select * from testhstore limit 50;
-create function bool_imp(boolean,boolean) returns boolean language sql as $f$ select (not $1) or $2; $f$;
-create operator => (leftarg = boolean, rightarg = boolean, procedure = bool_imp);
-select every( ((h1.h #># h2.h AND h2.h #># h3.h) => (h1.h #># h3.h)) AND ((h1.h #>=# h2.h AND h2.h #>=# h3.h) => (h1.h #>=# h3.h)) AND ((h1.h #<# h2.h AND h2.h #<# h3.h) => (h1.h #<# h3.h)) AND ((h1.h #<=# h2.h AND h2.h #<=# h3.h) => (h1.h #<=# h3.h)) AND ((h1.h = h2.h AND h2.h = h3.h) => (h1.h = h3.h)) ) from testhstore2 h1, testhstore2 h2, testhstore2 h3;
- every 
--------
- t
-(1 row)
 
 -- sort/hash
 select count(distinct h) from testhstore;
