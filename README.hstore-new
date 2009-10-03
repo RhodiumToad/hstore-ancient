@@ -1,36 +1,34 @@
-============================================================================
-WARNING WARNING WARNING
-============================================================================
+========================================================================
+COMPATIBILITY WARNING
+=====================
 
-THIS VERSION OF hstore IS NOT BINARY COMPATIBLE WITH THE ONE SHIPPED
-IN contrib/hstore IN POSTGRESQL 8.3 and 8.4. IF YOU ALREADY HAVE DATA
-IN YOUR DATABASE THAT USES THE hstore TYPE, THEN YOU MUST FOLLOW THE
-PROCEDURES GIVEN BELOW TO INSTALL THIS VERSION OTHERWISE YOU WILL
-SUFFER CRASHES AND POTENTIALLY LOST DATA.
+Before installing this code into any database that has previously used
+the hstore type, whether from contrib/hstore or earlier CVS versions of
+this module, MAKE SURE YOU TAKE BACKUPS and read carefully the UPGRADING
+section of this file.
 
-ALWAYS MAKE BACKUPS BEFORE ATTEMPTING TO INSTALL THIS.
-
-============================================================================
+========================================================================
 
 hstore-new
 ==========
 
 This module is an enhanced version of the hstore type from
 contrib/hstore, intended to allow the new features to be used in
-existing postgresql versions. (This code is being submitted for
-inclusion in future versions, but I have had requests to backport the
-functionality.)
+existing postgresql versions. (This code is equivalent in
+functionality and storage format to that in contrib/hstore from
+8.5alpha2 onwards.)
 
-This code supports all the functions provided by contrib/hstore and
-adds the following additions:
+This code supports all the functions provided by contrib/hstore from
+versions prior to 8.5 and adds the following:
 
-  - removal of undocumented 65535-byte limit on keys/values; both
-    keys and values can now be as long as desired, within the 1GB
-    limit for the whole hstore value (though you'll find a lot of
-    stuff breaks if you have hstores over 500MB, so don't try).
+  - removal of 65535-byte limit on keys/values; both keys and values
+    can now be as long as desired, within the 1GB limit for the whole
+    hstore value (though you'll find a lot of stuff breaks if you have
+    hstores over 500MB, so don't try).
 
   - support for btree and hash opclasses (allows hstores to be
-    compared for equality, aggregated, and have UNIQUE indexes)
+    compared for equality or aggregated, and to have UNIQUE indexes as
+    long as they are not too large for a btree index)
 
   - binary I/O now supported
 
@@ -47,6 +45,10 @@ adds the following additions:
     hstore = hstore   returns boolean  (equality)
     hstore <> hstore  returns boolean  (inequality)
     record #= hstore  returns record   (see populate_record)
+    %% hstore         returns text[]   (return key/value array)
+    %# hstore         returns text[]   (return 2-d key/value array)
+
+    hstore(text[])    - construct an hstore from a single array
 
   - conversions between hstore and record values:
 
@@ -72,8 +74,17 @@ new one in the normal way, e.g.:
 
    psql -f "$(pg_config --sharedir)/contrib/hstore-new.sql" dbname
 
-or using \i from inside psql. Do _NOT_ attempt to use psql -1, the
-script contains its own BEGIN/COMMIT.
+or using \i from inside psql.
+
+The hstore-new.sql script is sensitive to the setting of the psql
+variable hstore_new_schema to specify which schema to install into
+(default "public"). This can be set from within psql by using
+
+  \set hstore_new_schema 'myschema'
+
+prior to using \i, or on the command line as:
+
+  psql --set hstore_new_schema=myschema ...
 
 (If the old hstore type is installed, but you have NO stored data that
 uses it (i.e. no table columns of hstore type), then you can deinstall
@@ -84,69 +95,70 @@ but otherwise the types are functionally compatible.)
 It is safe to use the old and new hstore types in different databases
 in the same cluster.
 
-It is possible (though not recommended, other than for migration as
-detailed below) to install both the old and the new types in the
-_same_ database by placing them in different schemas. Note that this
-can be very confusing!
 
-
-CONVERSION OF EXISTING DATA
-===========================
-
-If you already have the old hstore type installed, and you wish to
-replace it completely with the new type, preserving data, then the
-following procedure is believed to work.
+UPGRADING
+=========
 
 ** ALWAYS MAKE BACKUPS BEFORE PROCEEDING FURTHER **
 
-We will assume that the old type was installed in the "public"
-schema and that the new type is also to be installed there.
-(A variation would be to install the new type in its own schema,
-but that complicates the handling of search_path in future.)
+The most effective method to upgrade from any previous version is to
+do a dump/restore as follows:
 
-We will also assume that this conversion is happening during a
-maintenance window, so we don't have to worry about concurrent
-access. (It _is_ possible to work around this, but if you're
-enough of an expert to handle that, you should be able to work
-out the details yourself.)
+1) pg_dump the individual database(s) to be upgraded (do not use the
+   -C/--create option on the dump)
 
-This can be done in a single transaction in psql; if you attempt
-this, I strongly recommend \set ON_ERROR_ROLLBACK 'on' so that
-typos don't kill the entire transaction. Copying the commands
-into a script may be preferable, or using the functions described
-below.
+2) drop or rename the affected databases, and recreate them (using
+   template0 as the template)
 
-First, we need some utility definitions:
+3) pre-install hstore-new into the new databases following the
+   procedure above (be sure to use the same schema that hstore was
+   previously installed in)
 
-  CREATE LANGUAGE plpgsql;  -- in the unlikely event you don't have it already
-  CREATE FUNCTION exec(text) RETURNS void LANGUAGE plpgsql
-    AS $f$ begin execute $1; end; $f$;
+4) restore the dumps, ignoring the errors about the hstore type and
+   its functions, operators, operator classes etc. already existing
 
-Next, we move aside critical functions from the original version:
+This method should enable all new functionality and convert all
+existing data without issues.
 
-  BEGIN;   -- if we're doing it as one transaction
-  CREATE SCHEMA hstore_tmp;
-  -- types can't be renamed but can be moved:
-  ALTER TYPE public.hstore SET SCHEMA hstore_tmp;
-  ALTER TYPE public.ghstore SET SCHEMA hstore_tmp;
-  -- operator classes can't be moved between schemas
-  ALTER OPERATOR CLASS gist_hstore_ops USING gist
-    RENAME TO gist_hstore_ops_old;
-  ALTER OPERATOR CLASS gin_hstore_ops USING gin
-    RENAME to gin_hstore_ops_old;
-  -- operators can't be renamed or moved
-  DROP OPERATOR public.=>(text,text);
-  CREATE OPERATOR hstore_tmp.=> ( LEFTARG = text,
-    RIGHTARG = text, PROCEDURE = hstore_tmp.tconvert );
-  -- move conflicting functions
-  ALTER FUNCTION hstore_in(cstring) SET SCHEMA hstore_tmp;
-  ALTER FUNCTION ghstore_in(cstring) SET SCHEMA hstore_tmp;
-  ALTER FUNCTION tconvert(text,text) SET SCHEMA hstore_tmp;
-  SELECT exec('ALTER FUNCTION ' || amproc::regprocedure
-              || ' SET SCHEMA hstore_tmp')
-    FROM pg_amproc
-   WHERE amproclefttype='hstore_tmp.hstore'::regtype
-     AND amproc::regproc::text like '%hstore%';
-  
-  
+However, if a dump/restore is impractical, then the following
+procedure may be used for an in-place upgrade.
+
+If the old hstore type is installed, then it is possible to replace it
+with the new one, which is able to read existing data in the old
+format.  But to eliminate an ambiguity in the data formats used by
+older versions of hstore and hstore-new, you should run the following
+command on every hstore column in your database, BEFORE attempting to
+install the new version:
+
+  ALTER TABLE tablename ALTER col TYPE hstore USING col::text::hstore;
+
+This removes spurious padding that previous versions sometimes left
+in hstore values, which interferes with the new code's ability to
+auto-detect the storage format.
+
+To ensure that the new index functionality is picked up, you can also
+drop the hstore index opclasses at this point (which requires dropping
+all indexes on hstore values) and recreate them later. To do this:
+
+  DROP OPERATOR CLASS gist_hstore_ops USING gist CASCADE;
+  DROP OPERATOR CLASS gin_hstore_ops USING gin CASCADE;
+
+This drop will cascade to all hstore indexes; be sure you have a record
+of all index definitions you want to restore later.
+
+If at this point you install the new version (as per the install
+instructions above), then most but not all of the new functionality
+will become available. The missing functionality will be:
+
+  - binary send/receive functions
+  - gist/gin index support for ?&, ?|  (only if the index opclasses
+    were not dropped as described above)
+
+In addition, there may be some performance loss due to in-core
+conversions of the old data values. Repeating the above ALTER TABLE
+command on each hstore column after the upgrade will force all values
+to be converted to the new format.
+
+
+
 
